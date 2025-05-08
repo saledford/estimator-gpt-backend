@@ -4,3 +4,4 @@ pandas
 PyMuPDF
 requests
 stripe
+python-dotenv
