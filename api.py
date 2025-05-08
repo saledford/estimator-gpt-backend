@@ -85,12 +85,16 @@ def trigger_webhook(data: dict):
 
 # Initialize the database if it doesn't exist
 def init_db():
-    conn = sqlite3.connect(DATABASE_URL)
+        try:
+conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE IF NOT EXISTS quotes (id INTEGER PRIMARY KEY, text TEXT, author TEXT)")
     cursor.execute("CREATE TABLE IF NOT EXISTS user_profiles (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
     cursor.execute("CREATE TABLE IF NOT EXISTS deviations (id INTEGER PRIMARY KEY, user_id INTEGER, deviation REAL, timestamp TEXT)")
     conn.commit()
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+
     conn.close()
 
 init_db()
