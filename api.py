@@ -16,17 +16,16 @@ def read_root():
 
 # Save profile route
 @app.post("/api/save-profile")
-async def save_profile(request: Request):
+async def save_profile(payload: dict):
     try:
-        data = await request.json()
-        user_name = data.get("name", "Unknown")
-        profile_id = data.get("id", "No ID")
+        user_name = payload.get("name", "Unknown")
+        profile_id = payload.get("id", "No ID")
 
         webhook_url = os.getenv("ZAPIER_WEBHOOK_URL")
         if not webhook_url:
             return JSONResponse(status_code=500, content={"error": "Zapier webhook URL not configured"})
 
-        response = requests.post(webhook_url, json=data)
+        response = requests.post(webhook_url, json=payload)
 
         if response.status_code != 200:
             return JSONResponse(status_code=502, content={"error": "Failed to send webhook", "details": response.text})
