@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import requests
 from dotenv import load_dotenv
@@ -8,6 +9,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# Allow frontend (localhost:5173) to call backend (localhost:8000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can change this to ["http://localhost:5173"] for tighter security
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Root route (for Render health checks)
 @app.get("/")
@@ -35,3 +44,9 @@ async def save_profile(payload: dict):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(e)})
+
+# 🔧 NEW endpoint to handle PDF or CSV file uploads
+@app.post("/api/parse-pdf")
+async def parse_pdf(file: UploadFile = File(...)):
+    return {"filename": file.filename}
+
