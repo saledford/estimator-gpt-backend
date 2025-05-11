@@ -1,8 +1,11 @@
-from fastapi import FastAPI, Request, UploadFile, File 
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import os
 import requests
+import sqlite3
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load .env variables
@@ -10,7 +13,7 @@ load_dotenv()
 
 app = FastAPI()
 
-# Allow frontend (localhost:5173) to call backend (localhost:8000)
+# Enable frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,12 +21,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Root route
+# === DATABASE SETUP ===
+DB_FILE = "quotes.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS quote_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_id INTEGER,
+            action TEXT,
+            action_timestamp TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# === API ROUTES ===
+
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "Estimator GPT backend is running"}
 
-# Save profile route (Zapier)
 @app.post("/api/save-profile")
 async def save_profile(payload: dict):
     try:
@@ -45,7 +67,6 @@ async def save_profile(payload: dict):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(e)})
 
-# File parsing endpoint
 @app.post("/api/parse-pdf")
 async def parse_pdf(file: UploadFile = File(...)):
     return {
@@ -56,3 +77,26 @@ async def parse_pdf(file: UploadFile = File(...)):
             {"id": 3, "title": "Drywall Package", "detail": "Walls: 1,500 SF, Ceilings: 800 SF"}
         ]
     }
+
+# === NEW: Quote Feedback Endpoint ===
+
+class QuoteFeedback(BaseModel):
+    quote_id: int
+    action: str
+
+@app.post("/api/update-quote")
+async def update_quote(feedback: QuoteFeedback):
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        timestamp = datetime.utcnow().isoformat()
+        cursor.execute(
+            "INSERT INTO quote_feedback (quote_id, action, action_timestamp) VALUES (?, ?, ?)",
+            (feedback.quote_id, feedback.action, timestamp)
+        )
+        conn.commit()
+        conn.close()
+        return {"message": f"Quote {feedback.quote_id} set to '{feedback.action}'"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
