@@ -87,6 +87,7 @@ class QuoteFeedback(BaseModel):
 @app.post("/api/update-quote")
 async def update_quote(feedback: QuoteFeedback):
     try:
+        print(f"📩 Received feedback: quote_id={feedback.quote_id}, action={feedback.action}")
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         timestamp = datetime.utcnow().isoformat()
@@ -96,7 +97,10 @@ async def update_quote(feedback: QuoteFeedback):
         )
         conn.commit()
         conn.close()
+        print("✅ Feedback saved to database.")
         return {"message": f"Quote {feedback.quote_id} set to '{feedback.action}'"}
     except Exception as e:
+        print("❌ Error saving feedback:", str(e))
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
