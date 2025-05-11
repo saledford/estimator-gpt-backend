@@ -66,68 +66,66 @@ async def parse_pdf(file: UploadFile = File(...)):
         found_quotes = []
         seen = set()
 
-        # Pattern definitions
-        door_qty_pattern = re.compile(r"\(?\b(\d{1,3})\b[\)]?\s?(ea|each|doors?)?", re.IGNORECASE)
+        # === Quantity Patterns ===
+        count_pattern = re.compile(r"\(?\b(\d{1,3})\b[\)]?\s?(ea|each|units?)?", re.IGNORECASE)
         sf_pattern = re.compile(r"\b([\d,]{2,7})\s?(sf|square feet)\b", re.IGNORECASE)
         lf_pattern = re.compile(r"\b([\d,]{2,7})\s?(lf|linear feet)\b", re.IGNORECASE)
 
+        # === Scopes + Keywords ===
         scope_definitions = [
-            {
-                "title": "Doors and Hardware",
-                "keywords": ["door", "doors", "hardware", "hm", "frame"],
-                "pattern": door_qty_pattern,
-                "type": "count"
-            },
-            {
-                "title": "Slab Concrete",
-                "keywords": ["slab", "concrete", "flatwork", "footing"],
-                "pattern": sf_pattern,
-                "type": "square feet"
-            },
-            {
-                "title": "Drywall Package",
-                "keywords": ["drywall", "gwb", "gypsum", "ceiling", "wallboard"],
-                "pattern": sf_pattern,
-                "type": "square feet"
-            },
-            {
-                "title": "Framing",
-                "keywords": ["metal stud", "framing", "partition"],
-                "pattern": lf_pattern,
-                "type": "linear feet"
-            },
-            {
-                "title": "Paint",
-                "keywords": ["paint", "coating", "painted wall"],
-                "pattern": sf_pattern,
-                "type": "square feet"
-            }
+            {"title": "Demolition", "keywords": ["demo", "demolition", "remove"], "pattern": None, "unit": None},
+            {"title": "Concrete", "keywords": ["slab", "concrete", "flatwork", "footing"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Masonry", "keywords": ["block", "brick", "cmu", "masonry"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Structural Steel", "keywords": ["steel beam", "structural steel", "w section"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Rough Carpentry", "keywords": ["framing", "joist", "sheathing", "decking"], "pattern": lf_pattern, "unit": "LF"},
+            {"title": "Roofing", "keywords": ["roof", "tpo", "asphalt", "shingles"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Doors and Hardware", "keywords": ["door", "hardware", "hm", "frame"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Windows / Glazing", "keywords": ["window", "glazing", "curtain wall"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Drywall", "keywords": ["drywall", "gwb", "gypsum", "ceiling", "wallboard"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Painting", "keywords": ["paint", "coating", "primer"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Flooring", "keywords": ["flooring", "vct", "carpet", "lvt"], "pattern": sf_pattern, "unit": "SF"},
+            {"title": "Toilet Accessories", "keywords": ["grab bar", "mirror", "partition", "toilet accessories"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Fire Protection", "keywords": ["sprinkler", "fire alarm", "fire riser"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Plumbing", "keywords": ["plumbing", "lav", "water heater", "pvc", "fixture"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "HVAC", "keywords": ["hvac", "duct", "grille", "diffuser", "rtu"], "pattern": count_pattern, "unit": "EA"},
+            {"title": "Electrical", "keywords": ["electrical", "light fixture", "receptacle", "panel"], "pattern": count_pattern, "unit": "EA"},
         ]
 
-        for line in all_lines:
-            lower_line = line.lower()
+        for scope in scope_definitions:
+            title = scope["title"]
+            keywords = scope["keywords"]
+            pattern = scope["pattern"]
+            unit = scope["unit"]
+            match_found = False
 
-            for scope in scope_definitions:
-                title = scope["title"]
-                if title in seen:
-                    continue
+            for line in all_lines:
+                lower_line = line.lower()
+                if any(kw in lower_line for kw in keywords):
+                    match_found = True
+                    if pattern:
+                        qty_match = pattern.search(line)
+                        if qty_match:
+                            qty = qty_match.group(1)
+                            found_quotes.append({
+                                "id": len(found_quotes) + 1,
+                                "title": title,
+                                "detail": f"Found: \"{line.strip()}\" → Quantity: {qty} {unit}"
+                            })
+                            break
+                    # fallback: match with no quantity
+                    found_quotes.append({
+                        "id": len(found_quotes) + 1,
+                        "title": title,
+                        "detail": f"Matched: \"{line.strip()}\" (no quantity found)"
+                    })
+                    break  # stop after first match per scope
 
-                if any(kw in lower_line for kw in scope["keywords"]):
-                    seen.add(title)
-                    match = scope["pattern"].search(line)
-                    if match:
-                        qty = match.group(1)
-                        found_quotes.append({
-                            "id": len(found_quotes) + 1,
-                            "title": title,
-                            "detail": f"Found '{line.strip()}' → Quantity: {qty} {scope['type']}"
-                        })
-                    else:
-                        found_quotes.append({
-                            "id": len(found_quotes) + 1,
-                            "title": title,
-                            "detail": f"Matched line but no quantity found: \"{line.strip()}\""
-                        })
+            if not match_found:
+                found_quotes.append({
+                    "id": len(found_quotes) + 1,
+                    "title": title,
+                    "detail": "No references to this scope were detected in the uploaded file."
+                })
 
         return {
             "filename": file.filename,
