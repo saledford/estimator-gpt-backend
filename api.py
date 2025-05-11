@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File 
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -30,23 +30,4 @@ async def save_profile(payload: dict):
         user_name = payload.get("name", "Unknown")
         profile_id = payload.get("id", "No ID")
 
-        webhook_url = os.getenv("ZAPIER_WEBHOOK_URL")
-        if not webhook_url:
-            return JSONResponse(status_code=500, content={"error": "Zapier webhook URL not configured"})
-
-        response = requests.post(webhook_url, json=payload)
-
-        if response.status_code != 200:
-            return JSONResponse(status_code=502, content={"error": "Failed to send webhook", "details": response.text})
-
-        print(f"✅ Sent webhook to Zapier for profile {profile_id}: {response.status_code}")
-        return {"message": f"Saved profile for {user_name} with ID {profile_id}"}
-
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(e)})
-
-# 🔧 NEW endpoint to handle PDF or CSV file uploads
-@app.post("/api/parse-pdf")
-async def parse_pdf(file: UploadFile = File(...)):
-    return {"filename": file.filename}
-
+        webhook_url = os.getenv("Z_
