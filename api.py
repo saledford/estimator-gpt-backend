@@ -15,7 +15,6 @@ load_dotenv()
 
 app = FastAPI()
 
-# Enable frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -83,20 +82,45 @@ async def parse_pdf(file: UploadFile = File(...)):
 
             if any(kw in lower_line for kw in door_keywords):
                 qty_match = door_qty_pattern.search(line)
+                seen.add("doors and hardware")
                 if qty_match:
                     qty = qty_match.group(1)
-                    seen.add("doors and hardware")
                     found_quotes.append({
                         "id": len(found_quotes) + 1,
                         "title": "Doors and Hardware",
                         "detail": f"Found '{line.strip()}' → Quantity: {qty}"
                     })
                 else:
-                    seen.add("doors and hardware")
                     found_quotes.append({
                         "id": len(found_quotes) + 1,
                         "title": "Doors and Hardware",
                         "detail": f"Matched line but no quantity found: \"{line.strip()}\""
+                    })
+
+        # === SLAB SF DETECTION ===
+        slab_keywords = ["slab", "concrete", "flatwork", "footing"]
+        sf_pattern = re.compile(r"\b([\d,]{2,7})\s?(sf|square feet)\b", re.IGNORECASE)
+
+        for line in all_lines:
+            lower_line = line.lower()
+            if "slab concrete" in seen:
+                continue
+
+            if any(kw in lower_line for kw in slab_keywords):
+                sf_match = sf_pattern.search(line)
+                seen.add("slab concrete")
+                if sf_match:
+                    sf = sf_match.group(1)
+                    found_quotes.append({
+                        "id": len(found_quotes) + 1,
+                        "title": "Slab Concrete",
+                        "detail": f"Found '{line.strip()}' → Area: {sf} SF"
+                    })
+                else:
+                    found_quotes.append({
+                        "id": len(found_quotes) + 1,
+                        "title": "Slab Concrete",
+                        "detail": f"Matched line but no square footage found: \"{line.strip()}\""
                     })
 
         return {
