@@ -30,4 +30,4 @@ async def save_profile(payload: dict):
         user_name = payload.get("name", "Unknown")
         profile_id = payload.get("id", "No ID")
 
-        webhook_url = os.getenv("Z_
+        webhook_url = os.getenv("ZAPIER_WEBHOOK_URL")
