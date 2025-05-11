@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List
 import os
 import requests
 import sqlite3
@@ -49,29 +50,31 @@ def read_root():
     return {"status": "ok", "message": "Estimator GPT backend is running"}
 
 @app.post("/api/parse-pdf")
-async def parse_pdf(file: UploadFile = File(...)):
+async def parse_pdf(files: List[UploadFile] = File(...)):
     try:
-        contents = await file.read()
-
-        with open("temp.pdf", "wb") as f:
-            f.write(contents)
-
-        doc = fitz.open("temp.pdf")
         all_lines = []
-        for page in doc:
-            page_text = page.get_text()
-            lines = page_text.splitlines()
-            all_lines.extend(lines)
+
+        for file in files:
+            contents = await file.read()
+
+            with open("temp.pdf", "wb") as f:
+                f.write(contents)
+
+            doc = fitz.open("temp.pdf")
+            for page in doc:
+                page_text = page.get_text()
+                lines = page_text.splitlines()
+                all_lines.extend(lines)
 
         found_quotes = []
         seen = set()
 
-        # === Quantity Patterns ===
+        # Pattern definitions
         count_pattern = re.compile(r"\(?\b(\d{1,3})\b[\)]?\s?(ea|each|units?)?", re.IGNORECASE)
         sf_pattern = re.compile(r"\b([\d,]{2,7})\s?(sf|square feet)\b", re.IGNORECASE)
         lf_pattern = re.compile(r"\b([\d,]{2,7})\s?(lf|linear feet)\b", re.IGNORECASE)
 
-        # === Scopes + Keywords ===
+        # Trade scopes
         scope_definitions = [
             {"title": "Demolition", "keywords": ["demo", "demolition", "remove"], "pattern": None, "unit": None},
             {"title": "Concrete", "keywords": ["slab", "concrete", "flatwork", "footing"], "pattern": sf_pattern, "unit": "SF"},
@@ -112,23 +115,22 @@ async def parse_pdf(file: UploadFile = File(...)):
                                 "detail": f"Found: \"{line.strip()}\" → Quantity: {qty} {unit}"
                             })
                             break
-                    # fallback: match with no quantity
                     found_quotes.append({
                         "id": len(found_quotes) + 1,
                         "title": title,
                         "detail": f"Matched: \"{line.strip()}\" (no quantity found)"
                     })
-                    break  # stop after first match per scope
+                    break
 
             if not match_found:
                 found_quotes.append({
                     "id": len(found_quotes) + 1,
                     "title": title,
-                    "detail": "No references to this scope were detected in the uploaded file."
+                    "detail": "No references to this scope were detected in the uploaded file(s)."
                 })
 
         return {
-            "filename": file.filename,
+            "filename": "multiple files",
             "quotes": found_quotes
         }
 
