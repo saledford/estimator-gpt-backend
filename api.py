@@ -8,6 +8,7 @@ import sqlite3
 from datetime import datetime
 from dotenv import load_dotenv
 import fitz  # PyMuPDF
+import re
 
 # Load .env variables
 load_dotenv()
@@ -69,28 +70,26 @@ async def parse_pdf(file: UploadFile = File(...)):
             lines = page_text.splitlines()
             all_lines.extend(lines)
 
-        # Smart keyword grouping
-        keyword_map = {
-            "Doors and Hardware": ["door", "doors", "hardware", "frame"],
-            "Slab Concrete": ["slab", "concrete", "sf"],
-            "Drywall Package": ["drywall", "gwb", "gypsum", "wallboard", "ceiling"],
-        }
-
         found_quotes = []
         seen = set()
 
+        # === DOOR COUNT DETECTION ===
+        door_keywords = ["door", "doors", "hm", "hollow metal", "flush", "frame"]
+        door_qty_pattern = re.compile(r"\(?\b(\d{1,3})\b[\)]?\s?(ea|each|doors?)?", re.IGNORECASE)
+
         for line in all_lines:
             lower_line = line.lower()
-            for title, keywords in keyword_map.items():
-                for kw in keywords:
-                    if kw in lower_line and title not in seen:
-                        seen.add(title)
+            if any(kw in lower_line for kw in door_keywords):
+                qty_match = door_qty_pattern.search(line)
+                if qty_match:
+                    qty = qty_match.group(1)
+                    if "Doors and Hardware" not in seen:
+                        seen.add("Doors and Hardware")
                         found_quotes.append({
                             "id": len(found_quotes) + 1,
-                            "title": title,
-                            "detail": f"Found keyword '{kw}' in line: \"{line.strip()}\""
+                            "title": "Doors and Hardware",
+                            "detail": f"Found '{line.strip()}' → Quantity: {qty}"
                         })
-                        break
 
         return {
             "filename": file.filename,
