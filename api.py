@@ -63,7 +63,6 @@ async def parse_pdf(file: UploadFile = File(...)):
             f.write(contents)
 
         doc = fitz.open("temp.pdf")
-
         all_lines = []
         for page in doc:
             page_text = page.get_text()
@@ -73,23 +72,32 @@ async def parse_pdf(file: UploadFile = File(...)):
         found_quotes = []
         seen = set()
 
-        # === DOOR COUNT DETECTION ===
+        # === DOOR DETECTION ===
         door_keywords = ["door", "doors", "hm", "hollow metal", "flush", "frame"]
         door_qty_pattern = re.compile(r"\(?\b(\d{1,3})\b[\)]?\s?(ea|each|doors?)?", re.IGNORECASE)
 
         for line in all_lines:
             lower_line = line.lower()
+            if "doors and hardware" in seen:
+                continue
+
             if any(kw in lower_line for kw in door_keywords):
                 qty_match = door_qty_pattern.search(line)
                 if qty_match:
                     qty = qty_match.group(1)
-                    if "Doors and Hardware" not in seen:
-                        seen.add("Doors and Hardware")
-                        found_quotes.append({
-                            "id": len(found_quotes) + 1,
-                            "title": "Doors and Hardware",
-                            "detail": f"Found '{line.strip()}' → Quantity: {qty}"
-                        })
+                    seen.add("doors and hardware")
+                    found_quotes.append({
+                        "id": len(found_quotes) + 1,
+                        "title": "Doors and Hardware",
+                        "detail": f"Found '{line.strip()}' → Quantity: {qty}"
+                    })
+                else:
+                    seen.add("doors and hardware")
+                    found_quotes.append({
+                        "id": len(found_quotes) + 1,
+                        "title": "Doors and Hardware",
+                        "detail": f"Matched line but no quantity found: \"{line.strip()}\""
+                    })
 
         return {
             "filename": file.filename,
