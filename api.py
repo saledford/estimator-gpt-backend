@@ -1,11 +1,10 @@
-
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+import fitz  # PyMuPDF
 
 app = FastAPI()
 
-# Enable CORS so frontend (localhost:5173) can connect
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,42 +19,47 @@ def root():
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
     parsed_quotes = []
+    seen_scopes = set()
 
     for file in files:
         content = await file.read()
-        text = content.decode("utf-8", errors="ignore").lower()
+        doc = fitz.open(stream=content, filetype="pdf")
 
-        if "door" in text:
-            parsed_quotes.append({
-                "id": 1,
-                "title": "Doors and Hardware",
-                "detail": "Found 'door' keyword in file."
-            })
-        if "slab" in text:
-            parsed_quotes.append({
-                "id": 2,
-                "title": "Slab Concrete",
-                "detail": "Found 'slab' keyword in file."
-            })
-        if "paint" in text:
-            parsed_quotes.append({
-                "id": 3,
-                "title": "Painting",
-                "detail": "Found 'paint' keyword in file."
-            })
-        if "gwb" in text or "drywall" in text:
-            parsed_quotes.append({
-                "id": 4,
-                "title": "Drywall Package",
-                "detail": "Found 'drywall' keyword in file."
-            })
+        full_text = ""
+        for page in doc:
+            full_text += page.get_text().lower()
+
+        doc.close()
+
+        # Add scope checks here
+        def add_scope(id, title, detail):
+            if title not in seen_scopes:
+                parsed_quotes.append({"id": id, "title": title, "detail": detail})
+                seen_scopes.add(title)
+
+        if "door" in full_text or "hm" in full_text or "hardware" in full_text:
+            add_scope(1, "Doors and Hardware", "Matched line with 'door' or 'HM'.")
+        if "slab" in full_text or "concrete" in full_text:
+            add_scope(2, "Slab Concrete", "Matched line with 'slab' or 'concrete'.")
+        if "paint" in full_text or "latex" in full_text:
+            add_scope(3, "Painting", "Matched line with 'paint' or 'latex'.")
+        if "gwb" in full_text or "drywall" in full_text:
+            add_scope(4, "Drywall Package", "Matched line with 'drywall' or 'gwb'.")
+        if "masonry" in full_text or "cmu" in full_text:
+            add_scope(5, "Masonry", "Matched line with 'masonry' or 'CMU'.")
+        if "roof" in full_text or "truss" in full_text:
+            add_scope(6, "Roof Framing", "Matched line with 'roof' or 'truss'.")
+        if "hvac" in full_text or "duct" in full_text:
+            add_scope(7, "HVAC System", "Matched line with 'hvac' or 'duct'.")
+        if "fire sprinkler" in full_text or "sprinkler" in full_text:
+            add_scope(8, "Fire Protection", "Matched line with 'sprinkler'.")
+        if "stud" in full_text or "metal stud" in full_text:
+            add_scope(9, "Wall Framing", "Matched line with 'metal stud'.")
+        if "ceiling tile" in full_text or "acoustical" in full_text:
+            add_scope(10, "Ceiling System", "Matched line with 'ceiling tile' or 'acoustical'.")
 
     if not parsed_quotes:
-        parsed_quotes.append({
-            "id": 99,
-            "title": "No Trade Detected",
-            "detail": "No known keywords found."
-        })
+        parsed_quotes.append({"id": 99, "title": "No Trade Detected", "detail": "No known scope keywords matched."})
 
     return {"quotes": parsed_quotes}
 
