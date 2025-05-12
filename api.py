@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
@@ -64,3 +63,31 @@ async def update_quote(payload: dict):
     action = payload.get("action")
     print(f"Quote {quote_id} marked as '{action}'")
     return {"message": f"Quote {quote_id} marked as '{action}'"}
+@app.post("/api/parse-takeoff")
+async def parse_takeoff(files: List[UploadFile] = File(...)):
+    import re
+    parsed_items = []
+
+    for file in files:
+        content = await file.read()
+        doc = fitz.open(stream=content, filetype="pdf")
+
+        for page in doc:
+            lines = page.get_text().splitlines()
+            for line in lines:
+                # Try to match a quantity table line like "RB-1 Wall Base 721.0 LF"
+                match = re.search(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
+                if match:
+                    code = match.group(1)
+                    description = match.group(2).strip()
+                    quantity = match.group(3).replace(",", "")
+                    unit = match.group(4).upper()
+                    parsed_items.append({
+                        "code": code,
+                        "description": description,
+                        "quantity": quantity,
+                        "unit": unit
+                    })
+        doc.close()
+
+    return {"takeoff": parsed_items}
