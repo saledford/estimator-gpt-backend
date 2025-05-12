@@ -1,59 +1,45 @@
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-import shutil
-import os
-import sqlite3
-from pdf_parser import extract_structured_takeoff
+from typing import List
 
 app = FastAPI()
 
-# === CORS Middleware ===
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for development
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# === SQLite Database Connection ===
-def get_db_connection():
-    conn = sqlite3.connect("quotes.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+@app.get("/")
+def root():
+    return {"message": "Estimator GPT backend is running"}
 
-# === Save user profile ===
-@app.post("/api/save-profile")
-async def save_profile(profile: dict):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO user_profiles (name, company, email, region, labor_rates_json, user_tier, onboarding_completed)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        profile["name"],
-        profile["company"],
-        profile["email"],
-        profile["region"],
-        profile["labor_rates_json"],
-        profile.get("user_tier", "Free"),
-        profile.get("onboarding_completed", False),
-    ))
-    conn.commit()
-    conn.close()
-    return {"message": "Profile saved"}
-
-# === Upload & Parse PDF (Structured Takeoff e.g. Door Schedule) ===
 @app.post("/api/parse-structured")
-async def parse_structured(file: UploadFile = File(...)):
-    temp_path = f"temp_uploads/{file.filename}"
-    os.makedirs("temp_uploads", exist_ok=True)
+async def parse_structured(files: List[UploadFile] = File(...)):
+    parsed_quotes = []
+    for file in files:
+        content = await file.read()
+        text = content.decode("utf-8", errors="ignore").lower()
 
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        if "door" in text:
+            parsed_quotes.append({"id": 1, "title": "Doors and Hardware", "detail": "Found 'door' keyword in file."})
+        if "slab" in text:
+            parsed_quotes.append({"id": 2, "title": "Slab Concrete", "detail": "Found 'slab' keyword in file."})
+        if "paint" in text:
+            parsed_quotes.append({"id": 3, "title": "Painting", "detail": "Found 'paint' keyword in file."})
+        if "gwb" in text or "drywall" in text:
+            parsed_quotes.append({"id": 4, "title": "Drywall Package", "detail": "Found 'drywall' keyword in file."})
 
-    try:
-        results = extract_structured_takeoff(temp_path)
-        return {"parsed": results}
-    finally:
-        os.remove(temp_path)
+    if not parsed_quotes:
+        parsed_quotes.append({"id": 99, "title": "No Trade Detected", "detail": "No known keywords found."})
+
+    return {"quotes": parsed_quotes}
+
+@app.post("/api/update-quote")
+async def update_quote(payload: dict):
+    quote_id = payload.get("quote_id")
+    action = payload.get("action")
+    print(f"Quote {quote_id} marked as '{action}'")
+    return {"message": f"Quote {quote_id} marked as '{action}'"}
