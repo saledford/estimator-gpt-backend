@@ -5,6 +5,7 @@ from typing import List
 
 app = FastAPI()
 
+# Enable CORS so frontend (localhost:5173) can connect
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,21 +20,42 @@ def root():
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
     parsed_quotes = []
+
     for file in files:
         content = await file.read()
         text = content.decode("utf-8", errors="ignore").lower()
 
         if "door" in text:
-            parsed_quotes.append({"id": 1, "title": "Doors and Hardware", "detail": "Found 'door' keyword in file."})
+            parsed_quotes.append({
+                "id": 1,
+                "title": "Doors and Hardware",
+                "detail": "Found 'door' keyword in file."
+            })
         if "slab" in text:
-            parsed_quotes.append({"id": 2, "title": "Slab Concrete", "detail": "Found 'slab' keyword in file."})
+            parsed_quotes.append({
+                "id": 2,
+                "title": "Slab Concrete",
+                "detail": "Found 'slab' keyword in file."
+            })
         if "paint" in text:
-            parsed_quotes.append({"id": 3, "title": "Painting", "detail": "Found 'paint' keyword in file."})
+            parsed_quotes.append({
+                "id": 3,
+                "title": "Painting",
+                "detail": "Found 'paint' keyword in file."
+            })
         if "gwb" in text or "drywall" in text:
-            parsed_quotes.append({"id": 4, "title": "Drywall Package", "detail": "Found 'drywall' keyword in file."})
+            parsed_quotes.append({
+                "id": 4,
+                "title": "Drywall Package",
+                "detail": "Found 'drywall' keyword in file."
+            })
 
     if not parsed_quotes:
-        parsed_quotes.append({"id": 99, "title": "No Trade Detected", "detail": "No known keywords found."})
+        parsed_quotes.append({
+            "id": 99,
+            "title": "No Trade Detected",
+            "detail": "No known keywords found."
+        })
 
     return {"quotes": parsed_quotes}
 
