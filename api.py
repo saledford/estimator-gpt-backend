@@ -4,12 +4,12 @@ from typing import List
 from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
-import openai
 import os
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI()
 
 app = FastAPI()
 
@@ -107,7 +107,7 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
         for page in doc:
             lines = page.get_text().splitlines()
             for line in lines:
-                match = re.search(r"(\\w+-?\\w*)\\s+(.+?)\\s+(\\d+[\\d.,]*)\\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
+                match = re.search(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
                 if match:
                     code = match.group(1)
                     description = match.group(2).strip()
@@ -141,15 +141,15 @@ async def chat(request: ChatRequest):
     takeoff = request.project_data.get("takeoff", [])
 
     if scopes or takeoff:
-        scope_text = "\\n".join(f"{q['title']}: {q.get('summary', '')}" for q in scopes)
-        takeoff_text = "\\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in takeoff)
+        scope_text = "\n".join(f"{q['title']}: {q.get('summary', '')}" for q in scopes)
+        takeoff_text = "\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in takeoff)
         messages.append({
             "role": "system",
-            "content": f"Scopes:\\n{scope_text}\\n\\nTakeoff:\\n{takeoff_text}"
+            "content": f"Scopes:\n{scope_text}\n\nTakeoff:\n{takeoff_text}"
         })
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=messages,
             temperature=0.4
