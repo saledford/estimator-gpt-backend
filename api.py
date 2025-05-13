@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import fitz  # PyMuPDF
+import re
 
 app = FastAPI()
 
@@ -44,18 +45,35 @@ async def parse_structured(files: List[UploadFile] = File(...)):
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
 
-        # Extract text from all pages
         for page in doc:
             full_text += page.get_text().lower()
 
-        # Try to pull suggested project name from the first page
         if doc.page_count > 0 and not suggested_name:
             first_page = doc.load_page(0)
             raw_text = first_page.get_text().strip()
-            for line in raw_text.splitlines():
-                if "project" in line.lower() or "title" in line.lower():
-                    suggested_name = line.strip()
+            lines = raw_text.splitlines()
+
+            candidates = []
+            for line in lines:
+                clean = line.strip()
+                if (
+                    len(clean) > 25
+                    and not clean.lower().startswith("jkf")
+                    and not clean.lower().startswith("drawing")
+                    and not clean.lower().startswith("project number")
+                ):
+                    candidates.append(clean)
+
+            # Prefer names containing 'renovation', 'public works', etc.
+            priority_keywords = ["renovation", "public works", "improvements", "addition", "new construction"]
+            for candidate in candidates:
+                if any(keyword in candidate.lower() for keyword in priority_keywords):
+                    suggested_name = candidate
                     break
+
+            if not suggested_name and candidates:
+                suggested_name = candidates[0]
+
             if not suggested_name:
                 suggested_name = "Untitled Project"
 
@@ -84,7 +102,6 @@ async def update_quote(payload: dict):
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
-    import re
     parsed_items = []
 
     for file in files:
