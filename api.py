@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import fitz  # PyMuPDF
+import re
 
 app = FastAPI()
 
@@ -36,7 +37,6 @@ master_scopes = {
 
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
-    found_scopes = set()
     full_text = ""
 
     for file in files:
@@ -48,11 +48,25 @@ async def parse_structured(files: List[UploadFile] = File(...)):
 
     parsed_quotes = []
     for scope_id, (scope_title, keywords) in master_scopes.items():
-        match_found = any(k in full_text for k in keywords)
+        matched_keywords = [k for k in keywords if k in full_text]
+        match_found = len(matched_keywords) > 0
+
+        # Build GPT-style summary based on matched keyword context
+        summary_text = ""
+        if match_found:
+            snippets = []
+            for kw in matched_keywords:
+                match = re.search(rf".{{0,60}}{re.escape(kw)}.{{0,60}}", full_text)
+                if match:
+                    snippets.append(match.group().strip())
+            preview = "; ".join(snippets[:3])
+            summary_text = f"{scope_title} scope includes: {preview}"
+
         parsed_quotes.append({
             "id": scope_id,
             "title": scope_title,
-            "detail": f"{'Matched' if match_found else 'Not found'}: {', '.join(keywords)}"
+            "detail": f"{'Matched' if match_found else 'Not found'}: {', '.join(keywords)}",
+            "summary": summary_text
         })
 
     return {"quotes": parsed_quotes}
@@ -63,19 +77,17 @@ async def update_quote(payload: dict):
     action = payload.get("action")
     print(f"Quote {quote_id} marked as '{action}'")
     return {"message": f"Quote {quote_id} marked as '{action}'"}
+
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
-    import re
     parsed_items = []
 
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
-
         for page in doc:
             lines = page.get_text().splitlines()
             for line in lines:
-                # Try to match a quantity table line like "RB-1 Wall Base 721.0 LF"
                 match = re.search(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
                 if match:
                     code = match.group(1)
