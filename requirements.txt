@@ -6,3 +6,4 @@ requests
 stripe
 python-dotenv
 python-multipart
+openai
