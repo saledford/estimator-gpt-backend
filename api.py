@@ -1,8 +1,15 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+import os
+import uuid
+import shutil
 import fitz  # PyMuPDF
 import re
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI()
 
@@ -35,10 +42,34 @@ master_scopes = {
     15: ("Fire Protection", ["sprinkler", "alarm", "fire suppression"]),
 }
 
+@app.post("/api/upload-file")
+async def upload_file(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+    file_id = str(uuid.uuid4())
+    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"fileId": file_id}
+
+@app.get("/api/get-file/{file_id}")
+async def get_file(file_id: str):
+    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found.")
+    return FileResponse(file_path, media_type="application/pdf")
+
+@app.delete("/api/delete-file/{file_id}")
+async def delete_file(file_id: str):
+    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return {"message": "File deleted."}
+    raise HTTPException(status_code=404, detail="File not found.")
+
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
     full_text = ""
-
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
@@ -50,9 +81,8 @@ async def parse_structured(files: List[UploadFile] = File(...)):
     for scope_id, (scope_title, keywords) in master_scopes.items():
         matched_keywords = [k for k in keywords if k in full_text]
         match_found = len(matched_keywords) > 0
-
-        # Build GPT-style summary based on matched keyword context
         summary_text = ""
+
         if match_found:
             snippets = []
             for kw in matched_keywords:
@@ -71,17 +101,9 @@ async def parse_structured(files: List[UploadFile] = File(...)):
 
     return {"quotes": parsed_quotes}
 
-@app.post("/api/update-quote")
-async def update_quote(payload: dict):
-    quote_id = payload.get("quote_id")
-    action = payload.get("action")
-    print(f"Quote {quote_id} marked as '{action}'")
-    return {"message": f"Quote {quote_id} marked as '{action}'"}
-
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
     parsed_items = []
-
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
