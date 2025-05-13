@@ -4,11 +4,12 @@ from typing import List
 from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
+import openai
 import os
-
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
@@ -64,7 +65,7 @@ async def parse_structured(files: List[UploadFile] = File(...)):
                 clean = line.strip()
                 if clean.isupper() and not any(k in clean.lower() for k in ["project", "renovation", "public works", "drawings", "school", "improvements"]):
                     continue
-                if len(clean) > 25 and not clean.lower().startswith("jkf") and not clean.lower().startswith("drawing") and not clean.lower().startswith("project number"):
+                if len(clean) > 25 and not clean.lower().startswith(("jkf", "drawing", "project number")):
                     candidates.append(clean)
 
             priority_keywords = ["drawings for", "renovation", "public works", "school", "addition", "project", "improvements"]
@@ -95,13 +96,6 @@ async def parse_structured(files: List[UploadFile] = File(...)):
         "suggestedProjectName": suggested_name
     }
 
-@app.post("/api/update-quote")
-async def update_quote(payload: dict):
-    quote_id = payload.get("quote_id")
-    action = payload.get("action")
-    print(f"Quote {quote_id} marked as '{action}'")
-    return {"message": f"Quote {quote_id} marked as '{action}'"}
-
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
     parsed_items = []
@@ -113,7 +107,7 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
         for page in doc:
             lines = page.get_text().splitlines()
             for line in lines:
-                match = re.search(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
+                match = re.search(r"(\\w+-?\\w*)\\s+(.+?)\\s+(\\d+[\\d.,]*)\\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
                 if match:
                     code = match.group(1)
                     description = match.group(2).strip()
@@ -136,20 +130,22 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     messages = [
-        {"role": "system", "content": "You are Estimator GPT, a professional construction estimator assistant. Be clear, concise, and helpful."}
+        {"role": "system", "content": "You are Estimator GPT, a professional construction estimator. Be clear, concise, and helpful."}
     ]
 
     for msg in request.discussion:
         role = "user" if msg["sender"] == "User" else "assistant"
         messages.append({"role": role, "content": msg["text"]})
 
-    scope_summary = "\n".join(f"{q['title']}: {q.get('summary', '')}" for q in request.project_data.get("quotes", []))
-    takeoff_summary = "\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in request.project_data.get("takeoff", []))
+    scopes = request.project_data.get("quotes", [])
+    takeoff = request.project_data.get("takeoff", [])
 
-    if scope_summary or takeoff_summary:
+    if scopes or takeoff:
+        scope_text = "\\n".join(f"{q['title']}: {q.get('summary', '')}" for q in scopes)
+        takeoff_text = "\\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in takeoff)
         messages.append({
             "role": "system",
-            "content": f"Project Scopes:\n{scope_summary}\n\nTakeoff Summary:\n{takeoff_summary}"
+            "content": f"Scopes:\\n{scope_text}\\n\\nTakeoff:\\n{takeoff_text}"
         })
 
     try:
