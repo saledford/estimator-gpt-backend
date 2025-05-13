@@ -77,6 +77,12 @@ async def parse_structured(files: List[UploadFile] = File(...)):
             full_text += page.get_text().lower()
         doc.close()
 
+    # Try to extract project name
+    project_name_match = re.search(r"(?i)(project(?: name)?|construction documents for)[:\-\n]?\s*(.+)", full_text)
+    suggested_project_name = "Unnamed Project"
+    if project_name_match:
+        suggested_project_name = project_name_match.group(2).strip().split("\n")[0]
+
     parsed_quotes = []
     for scope_id, (scope_title, keywords) in master_scopes.items():
         matched_keywords = [k for k in keywords if k in full_text]
@@ -99,7 +105,10 @@ async def parse_structured(files: List[UploadFile] = File(...)):
             "summary": summary_text
         })
 
-    return {"quotes": parsed_quotes}
+    return {
+        "quotes": parsed_quotes,
+        "suggestedProjectName": suggested_project_name
+    }
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
