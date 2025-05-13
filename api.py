@@ -1,8 +1,16 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
+import openai
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
@@ -56,7 +64,6 @@ async def parse_structured(files: List[UploadFile] = File(...)):
             candidates = []
             for line in lines:
                 clean = line.strip()
-                # Ignore generic all-uppercase lines unless they contain known keywords
                 if clean.isupper() and not any(k in clean.lower() for k in ["project", "renovation", "public works", "drawings", "school", "improvements"]):
                     continue
                 if len(clean) > 25 and not clean.lower().startswith("jkf") and not clean.lower().startswith("drawing") and not clean.lower().startswith("project number"):
@@ -72,7 +79,6 @@ async def parse_structured(files: List[UploadFile] = File(...)):
                 suggested_name = candidates[0]
 
             if not suggested_name:
-                # Final fallback: cleaned filename
                 suggested_name = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ").strip()
 
         doc.close()
@@ -124,3 +130,38 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
         doc.close()
 
     return {"takeoff": parsed_items}
+
+class ChatRequest(BaseModel):
+    discussion: list
+    project_data: dict
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    messages = [
+        {"role": "system", "content": "You are Estimator GPT, a professional construction estimator assistant. Be clear, concise, and helpful."}
+    ]
+
+    for msg in request.discussion:
+        role = "user" if msg["sender"] == "User" else "assistant"
+        messages.append({"role": role, "content": msg["text"]})
+
+    scope_summary = "\n".join(f"{q['title']}: {q.get('summary', '')}" for q in request.project_data.get("quotes", []))
+    takeoff_summary = "\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in request.project_data.get("takeoff", []))
+
+    if scope_summary or takeoff_summary:
+        messages.append({
+            "role": "system",
+            "content": f"Project Scopes:\n{scope_summary}\n\nTakeoff Summary:\n{takeoff_summary}"
+        })
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=messages,
+            temperature=0.4
+        )
+        reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        reply = f"Error generating response: {str(e)}"
+
+    return {"reply": reply}
