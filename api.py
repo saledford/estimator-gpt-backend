@@ -56,16 +56,13 @@ async def parse_structured(files: List[UploadFile] = File(...)):
             candidates = []
             for line in lines:
                 clean = line.strip()
-                if (
-                    len(clean) > 25
-                    and not clean.lower().startswith("jkf")
-                    and not clean.lower().startswith("drawing")
-                    and not clean.lower().startswith("project number")
-                ):
+                # Ignore generic all-uppercase lines unless they contain known keywords
+                if clean.isupper() and not any(k in clean.lower() for k in ["project", "renovation", "public works", "drawings", "school", "improvements"]):
+                    continue
+                if len(clean) > 25 and not clean.lower().startswith("jkf") and not clean.lower().startswith("drawing") and not clean.lower().startswith("project number"):
                     candidates.append(clean)
 
-            # Prefer names containing 'renovation', 'public works', etc.
-            priority_keywords = ["renovation", "public works", "improvements", "addition", "new construction"]
+            priority_keywords = ["drawings for", "renovation", "public works", "school", "addition", "project", "improvements"]
             for candidate in candidates:
                 if any(keyword in candidate.lower() for keyword in priority_keywords):
                     suggested_name = candidate
@@ -75,7 +72,8 @@ async def parse_structured(files: List[UploadFile] = File(...)):
                 suggested_name = candidates[0]
 
             if not suggested_name:
-                suggested_name = "Untitled Project"
+                # Final fallback: cleaned filename
+                suggested_name = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ").strip()
 
         doc.close()
 
