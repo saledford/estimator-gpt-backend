@@ -1,15 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import os
-import uuid
-import shutil
 import fitz  # PyMuPDF
-import re
-
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI()
 
@@ -42,80 +34,63 @@ master_scopes = {
     15: ("Fire Protection", ["sprinkler", "alarm", "fire suppression"]),
 }
 
-@app.post("/api/upload-file")
-async def upload_file(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
-    file_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
-    with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    return {"fileId": file_id}
-
-@app.get("/api/get-file/{file_id}")
-async def get_file(file_id: str):
-    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found.")
-    return FileResponse(file_path, media_type="application/pdf")
-
-@app.delete("/api/delete-file/{file_id}")
-async def delete_file(file_id: str):
-    file_path = os.path.join(UPLOAD_DIR, file_id + ".pdf")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        return {"message": "File deleted."}
-    raise HTTPException(status_code=404, detail="File not found.")
-
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
+    found_scopes = set()
     full_text = ""
+    suggested_name = ""
+
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
+
+        # Extract text from all pages
         for page in doc:
             full_text += page.get_text().lower()
-        doc.close()
 
-    # Try to extract project name
-    project_name_match = re.search(r"(?i)(project(?: name)?|construction documents for)[:\-\n]?\s*(.+)", full_text)
-    suggested_project_name = "Unnamed Project"
-    if project_name_match:
-        suggested_project_name = project_name_match.group(2).strip().split("\n")[0]
+        # Try to pull suggested project name from the first page
+        if doc.page_count > 0 and not suggested_name:
+            first_page = doc.load_page(0)
+            raw_text = first_page.get_text().strip()
+            for line in raw_text.splitlines():
+                if "project" in line.lower() or "title" in line.lower():
+                    suggested_name = line.strip()
+                    break
+            if not suggested_name:
+                suggested_name = "Untitled Project"
+
+        doc.close()
 
     parsed_quotes = []
     for scope_id, (scope_title, keywords) in master_scopes.items():
-        matched_keywords = [k for k in keywords if k in full_text]
-        match_found = len(matched_keywords) > 0
-        summary_text = ""
-
-        if match_found:
-            snippets = []
-            for kw in matched_keywords:
-                match = re.search(rf".{{0,60}}{re.escape(kw)}.{{0,60}}", full_text)
-                if match:
-                    snippets.append(match.group().strip())
-            preview = "; ".join(snippets[:3])
-            summary_text = f"{scope_title} scope includes: {preview}"
-
+        match_found = any(k in full_text for k in keywords)
         parsed_quotes.append({
             "id": scope_id,
             "title": scope_title,
-            "detail": f"{'Matched' if match_found else 'Not found'}: {', '.join(keywords)}",
-            "summary": summary_text
+            "detail": f"{'Matched' if match_found else 'Not found'}: {', '.join(keywords)}"
         })
 
     return {
         "quotes": parsed_quotes,
-        "suggestedProjectName": suggested_project_name
+        "suggestedProjectName": suggested_name
     }
+
+@app.post("/api/update-quote")
+async def update_quote(payload: dict):
+    quote_id = payload.get("quote_id")
+    action = payload.get("action")
+    print(f"Quote {quote_id} marked as '{action}'")
+    return {"message": f"Quote {quote_id} marked as '{action}'"}
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
+    import re
     parsed_items = []
+
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
+
         for page in doc:
             lines = page.get_text().splitlines()
             for line in lines:
