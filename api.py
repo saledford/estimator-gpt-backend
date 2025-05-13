@@ -4,7 +4,6 @@ from typing import List
 from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
-import openai
 import os
 
 from dotenv import load_dotenv
