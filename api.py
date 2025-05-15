@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
 import os
+import uuid
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -24,6 +25,32 @@ app.add_middleware(
 def root():
     return {"message": "Estimator GPT backend is running"}
 
+# 🔧 NEW: File upload handler
+UPLOAD_FOLDER = "temp_uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.post("/api/upload-file")
+async def upload_file(files: List[UploadFile] = File(...)):
+    uploaded = []
+    for file in files:
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}_{file.filename}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+        try:
+            with open(filepath, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            uploaded.append({
+                "fileId": file_id,
+                "name": file.filename
+            })
+        except Exception as e:
+            return {"detail": f"Failed to save file {file.filename}: {str(e)}"}
+
+    return {"fileId": uploaded[0]["fileId"]}
+
+# 🔍 Structured parsing
 master_scopes = {
     1: ("Sitework", ["grading", "site clearing", "erosion", "earthwork"]),
     2: ("Concrete", ["slab", "concrete", "footing"]),
