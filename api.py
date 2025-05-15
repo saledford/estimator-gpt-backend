@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from typing import List
 from pydantic import BaseModel
 import fitz  # PyMuPDF
@@ -25,10 +26,11 @@ app.add_middleware(
 def root():
     return {"message": "Estimator GPT backend is running"}
 
-# 🔧 NEW: File upload handler
+# 🔧 File storage path
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ✅ Upload endpoint
 @app.post("/api/upload-file")
 async def upload_file(files: List[UploadFile] = File(...)):
     uploaded = []
@@ -50,7 +52,17 @@ async def upload_file(files: List[UploadFile] = File(...)):
 
     return {"fileId": uploaded[0]["fileId"]}
 
-# 🔍 Structured parsing
+# ✅ Get file by ID
+@app.get("/api/get-file/{file_id}")
+async def get_file(file_id: str):
+    for filename in os.listdir(UPLOAD_FOLDER):
+        if filename.startswith(file_id):
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            if os.path.exists(filepath):
+                return FileResponse(filepath, media_type="application/pdf", filename=filename)
+    return {"detail": "File not found"}
+
+# 📘 Scope detection keywords
 master_scopes = {
     1: ("Sitework", ["grading", "site clearing", "erosion", "earthwork"]),
     2: ("Concrete", ["slab", "concrete", "footing"]),
