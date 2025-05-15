@@ -30,27 +30,20 @@ def root():
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ✅ Upload endpoint
+# ✅ Upload single file endpoint
 @app.post("/api/upload-file")
-async def upload_file(files: List[UploadFile] = File(...)):
-    uploaded = []
-    for file in files:
-        file_id = str(uuid.uuid4())
-        filename = f"{file_id}_{file.filename}"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
+async def upload_file(file: UploadFile = File(...)):
+    file_id = str(uuid.uuid4())
+    filename = f"{file_id}_{file.filename}"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
 
-        try:
-            with open(filepath, "wb") as f:
-                content = await file.read()
-                f.write(content)
-            uploaded.append({
-                "fileId": file_id,
-                "name": file.filename
-            })
-        except Exception as e:
-            return {"detail": f"Failed to save file {file.filename}: {str(e)}"}
-
-    return {"fileId": uploaded[0]["fileId"]}
+    try:
+        with open(filepath, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        return {"fileId": file_id}
+    except Exception as e:
+        return {"detail": f"Failed to save file {file.filename}: {str(e)}"}
 
 # ✅ Get file by ID
 @app.get("/api/get-file/{file_id}")
