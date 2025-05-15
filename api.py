@@ -55,6 +55,17 @@ async def get_file(file_id: str):
                 return FileResponse(filepath, media_type="application/pdf", filename=filename)
     return {"detail": "File not found"}
 
+# ✅ Delete file by ID
+@app.delete("/api/delete-file/{file_id}")
+async def delete_file(file_id: str):
+    for filename in os.listdir(UPLOAD_FOLDER):
+        if filename.startswith(file_id):
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                return {"message": "File deleted successfully"}
+    return {"detail": "File not found"}
+
 # 📘 Scope detection keywords
 master_scopes = {
     1: ("Sitework", ["grading", "site clearing", "erosion", "earthwork"]),
