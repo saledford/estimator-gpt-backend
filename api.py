@@ -26,11 +26,9 @@ app.add_middleware(
 def root():
     return {"message": "Estimator GPT backend is running"}
 
-# 🔧 File storage path
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ✅ Upload single file endpoint
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     file_id = str(uuid.uuid4())
@@ -45,7 +43,6 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         return {"detail": f"Failed to save file {file.filename}: {str(e)}"}
 
-# ✅ Get file by ID
 @app.get("/api/get-file/{file_id}")
 async def get_file(file_id: str):
     for filename in os.listdir(UPLOAD_FOLDER):
@@ -55,7 +52,6 @@ async def get_file(file_id: str):
                 return FileResponse(filepath, media_type="application/pdf", filename=filename)
     return {"detail": "File not found"}
 
-# ✅ Delete file by ID
 @app.delete("/api/delete-file/{file_id}")
 async def delete_file(file_id: str):
     for filename in os.listdir(UPLOAD_FOLDER):
@@ -66,28 +62,8 @@ async def delete_file(file_id: str):
                 return {"message": "File deleted successfully"}
     return {"detail": "File not found"}
 
-# 📘 Scope detection keywords
-master_scopes = {
-    1: ("Sitework", ["grading", "site clearing", "erosion", "earthwork"]),
-    2: ("Concrete", ["slab", "concrete", "footing"]),
-    3: ("Masonry", ["cmu", "brick", "masonry"]),
-    4: ("Metals", ["steel", "beam", "weld", "metal deck"]),
-    5: ("Woods & Plastics", ["lumber", "wood framing", "sheathing", "blocking"]),
-    6: ("Thermal & Moisture", ["insulation", "vapor barrier", "membrane", "flashing"]),
-    7: ("Doors & Windows", ["door", "frame", "hardware", "window"]),
-    8: ("Finishes", ["paint", "tile", "carpet", "acoustical", "flooring"]),
-    9: ("Specialties", ["toilet accessory", "fire extinguisher", "lockers"]),
-    10: ("Equipment", ["equipment", "furnish", "appliance"]),
-    11: ("Furnishings", ["furniture", "casework", "countertop"]),
-    12: ("Plumbing", ["pipe", "fixture", "sanitary", "pvc"]),
-    13: ("HVAC", ["hvac", "duct", "vent", "air handler"]),
-    14: ("Electrical", ["wire", "panel", "circuit", "lighting", "breaker"]),
-    15: ("Fire Protection", ["sprinkler", "alarm", "fire suppression"]),
-}
-
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
-    found_scopes = set()
     full_text = ""
     suggested_name = ""
 
@@ -125,17 +101,8 @@ async def parse_structured(files: List[UploadFile] = File(...)):
 
         doc.close()
 
-    parsed_quotes = []
-    for scope_id, (scope_title, keywords) in master_scopes.items():
-        match_found = any(k in full_text for k in keywords)
-        parsed_quotes.append({
-            "id": scope_id,
-            "title": scope_title,
-            "detail": f"{'Matched' if match_found else 'Not found'}: {', '.join(keywords)}"
-        })
-
     return {
-        "quotes": parsed_quotes,
+        "quotes": [],
         "suggestedProjectName": suggested_name
     }
 
@@ -157,10 +124,14 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
                     quantity = match.group(3).replace(",", "")
                     unit = match.group(4).upper()
                     parsed_items.append({
-                        "code": code,
+                        "division": "Unknown",
                         "description": description,
                         "quantity": quantity,
-                        "unit": unit
+                        "unit": unit,
+                        "unitCost": 0,
+                        "modifier": 0,
+                        "customTotal": None,
+                        "useCustomTotal": False
                     })
         doc.close()
 
@@ -185,7 +156,7 @@ async def chat(request: ChatRequest):
 
     if scopes or takeoff:
         scope_text = "\n".join(f"{q['title']}: {q.get('summary', '')}" for q in scopes)
-        takeoff_text = "\n".join(f"{t['trade']} – Qty: {t['quantity']} {t['unit']}" for t in takeoff)
+        takeoff_text = "\n".join(f"{t['division']} {t['description']} – Qty: {t['quantity']} {t['unit']} @ ${t['unitCost']}" for t in takeoff)
         messages.append({
             "role": "system",
             "content": f"Scopes:\n{scope_text}\n\nTakeoff:\n{takeoff_text}"
