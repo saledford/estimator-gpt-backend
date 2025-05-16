@@ -62,6 +62,33 @@ async def delete_file(file_id: str):
                 return {"message": "File deleted successfully"}
     return {"detail": "File not found"}
 
+CSI_DIVISIONS = [
+    ("01", "General Requirements"),
+    ("02", "Existing Conditions"),
+    ("03", "Concrete"),
+    ("04", "Masonry"),
+    ("05", "Metals"),
+    ("06", "Wood, Plastics, and Composites"),
+    ("07", "Thermal and Moisture Protection"),
+    ("08", "Openings (Doors, Windows)"),
+    ("09", "Finishes"),
+    ("10", "Specialties"),
+    ("11", "Equipment"),
+    ("12", "Furnishings"),
+    ("13", "Special Construction"),
+    ("14", "Conveying Equipment (Elevators)"),
+    ("21", "Fire Suppression"),
+    ("22", "Plumbing"),
+    ("23", "HVAC"),
+    ("25", "Integrated Automation"),
+    ("26", "Electrical"),
+    ("27", "Communications"),
+    ("28", "Electronic Safety and Security"),
+    ("31", "Earthwork"),
+    ("32", "Exterior Improvements"),
+    ("33", "Utilities")
+]
+
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
     full_text = ""
@@ -101,8 +128,19 @@ async def parse_structured(files: List[UploadFile] = File(...)):
 
         doc.close()
 
+    quotes = [
+        {
+            "id": div,
+            "title": name,
+            "summary": "Placeholder for GPT",
+            "cost": 0,
+            "markup": 10,
+            "finalPrice": 0
+        } for div, name in CSI_DIVISIONS
+    ]
+
     return {
-        "quotes": [],
+        "quotes": quotes,
         "suggestedProjectName": suggested_name
     }
 
