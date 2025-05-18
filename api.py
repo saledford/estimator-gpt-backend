@@ -9,6 +9,7 @@ import os
 import uuid
 from dotenv import load_dotenv
 from openai import OpenAI
+import json
 
 load_dotenv()
 client = OpenAI()
@@ -208,3 +209,54 @@ Manual:
         return {"divisionDescriptions": reply}
     except Exception as e:
         return {"divisionDescriptions": f"Error: {str(e)}"}
+
+@app.post("/api/analyze-division/{division_id}")
+async def analyze_division(division_id: str, request: Request):
+    body = await request.json()
+    quotes = body.get("quotes", [])
+    takeoff = body.get("takeoff", [])
+    specs = body.get("specs", {})
+
+    division_quote = next((q for q in quotes if q["id"] == division_id), None)
+    division_takeoff = [t for t in takeoff if t["division"] == division_id]
+    division_specs = specs.get(division_id, "")
+
+    summary_text = division_quote.get("summary", "") if division_quote else ""
+
+    prompt = f"""
+Analyze Division {division_id} in this construction estimate.
+
+Quote Summary:
+{summary_text or 'None provided'}
+
+Specs:
+{division_specs or 'Not specified'}
+
+Takeoff Items:
+"""
+    for t in division_takeoff:
+        line = f"- {t['description']} | Qty: {t['quantity']} {t['unit']} @ ${t['unitCost']}"
+        prompt += f"{line}\n"
+
+    prompt += """
+
+Provide a short analysis:
+- What scope is clearly covered?
+- What appears to be missing?
+- Any unusual or risky exclusions?
+Be concise and accurate.
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a construction estimator reviewing one division in detail."},
+                {"role": "user", "content": prompt[:12000]}
+            ],
+            temperature=0.4
+        )
+        reply = response.choices[0].message.content.strip()
+        return {"analysis": reply}
+    except Exception as e:
+        return {"analysis": f"Error: {str(e)}"}
