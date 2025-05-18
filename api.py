@@ -1,3 +1,10 @@
+# VERSION: Enhanced May 18, 2025
+# INCLUDES:
+# - GPT-4o division analysis, scope summary, spec parser
+# - Raw text extraction endpoint (/api/extract-text)
+# - Keyword detection in /api/parse-structured (summary prefill)
+# - File upload, delete, and structured parse logging to quote_parsing.log
+
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
