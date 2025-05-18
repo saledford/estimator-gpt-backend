@@ -62,87 +62,25 @@ async def delete_file(file_id: str):
                 return {"message": "File deleted successfully"}
     return {"detail": "File not found"}
 
-CSI_DIVISIONS = [
-    ("01", "General Requirements"),
-    ("02", "Existing Conditions"),
-    ("03", "Concrete"),
-    ("04", "Masonry"),
-    ("05", "Metals"),
-    ("06", "Wood, Plastics, and Composites"),
-    ("07", "Thermal and Moisture Protection"),
-    ("08", "Openings (Doors, Windows)"),
-    ("09", "Finishes"),
-    ("10", "Specialties"),
-    ("11", "Equipment"),
-    ("12", "Furnishings"),
-    ("13", "Special Construction"),
-    ("14", "Conveying Equipment (Elevators)"),
-    ("21", "Fire Suppression"),
-    ("22", "Plumbing"),
-    ("23", "HVAC"),
-    ("25", "Integrated Automation"),
-    ("26", "Electrical"),
-    ("27", "Communications"),
-    ("28", "Electronic Safety and Security"),
-    ("31", "Earthwork"),
-    ("32", "Exterior Improvements"),
-    ("33", "Utilities")
-]
-
-@app.post("/api/parse-structured")
-async def parse_structured(files: List[UploadFile] = File(...)):
-    full_text = ""
-    suggested_name = ""
-
-    for file in files:
-        content = await file.read()
-        doc = fitz.open(stream=content, filetype="pdf")
-
-        for page in doc:
-            full_text += page.get_text().lower()
-
-        if doc.page_count > 0 and not suggested_name:
-            first_page = doc.load_page(0)
-            raw_text = first_page.get_text().strip()
-            lines = raw_text.splitlines()
-
-            candidates = []
-            for line in lines:
-                clean = line.strip()
-                if clean.isupper() and not any(k in clean.lower() for k in ["project", "renovation", "public works", "drawings", "school", "improvements"]):
-                    continue
-                if len(clean) > 25 and not clean.lower().startswith(("jkf", "drawing", "project number")):
-                    candidates.append(clean)
-
-            priority_keywords = ["drawings for", "renovation", "public works", "school", "addition", "project", "improvements"]
-            for candidate in candidates:
-                if any(keyword in candidate.lower() for keyword in priority_keywords):
-                    suggested_name = candidate
-                    break
-
-            if not suggested_name and candidates:
-                suggested_name = candidates[0]
-
-            if not suggested_name:
-                suggested_name = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ").strip()
-
-        doc.close()
-
-    quotes = [
-        {
-            "id": div,
-            "title": name,
-            "summary": "Placeholder for GPT",
-            "cost": 0,
-            "markup": 10,
-            "finalPrice": 0
-        } for div, name in CSI_DIVISIONS
-    ]
-
-    return {
-        "quotes": quotes,
-        "suggestedProjectName": suggested_name
-    }
+CSI_KEYWORDS = {
+    "01": ["general requirement", "mobilization"],
+    "03": ["concrete", "slab", "footing"],
+    "04": ["masonry", "brick", "block", "cmu"],
+    "05": ["steel", "metal deck", "joist"],
+    "06": ["wood", "framing", "carpentry"],
+    "07": ["insulation", "roof", "moisture", "flashing"],
+    "08": ["door", "window", "frame", "hardware"],
+    "09": ["drywall", "paint", "ceiling", "flooring", "tile", "acoustical"],
+    "10": ["toilet accessory", "specialty", "locker"],
+    "11": ["equipment", "kitchen hood"],
+    "12": ["furniture", "casework", "countertop"],
+    "13": ["pre-engineered building", "dome"],
+    "14": ["elevator", "lift"],
+    "21": ["sprinkler", "fire suppression"],
+    "22": ["plumbing", "pipe", "fixture"],
+    "23": ["hvac", "duct", "air handler"],
+    "26": ["electrical", "conduit", "lighting", "panel"]
+}
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
@@ -161,15 +99,30 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
                     description = match.group(2).strip()
                     quantity = match.group(3).replace(",", "")
                     unit = match.group(4).upper()
+
+                    # Try to map to a division based on keywords
+                    division = "Unknown"
+                    for div, keywords in CSI_KEYWORDS.items():
+                        if any(kw in description.lower() for kw in keywords):
+                            division = div
+                            break
+
+                    issue = None
+                    try:
+                        float(quantity)
+                    except ValueError:
+                        issue = "Invalid quantity format"
+
                     parsed_items.append({
-                        "division": "Unknown",
+                        "division": division,
                         "description": description,
                         "quantity": quantity,
                         "unit": unit,
                         "unitCost": 0,
                         "modifier": 0,
                         "customTotal": None,
-                        "useCustomTotal": False
+                        "useCustomTotal": False,
+                        "issue": issue
                     })
         doc.close()
 
