@@ -144,124 +144,32 @@ async def parse_structured(files: List[UploadFile] = File(...)):
         "suggestedProjectName": suggested_name
     }
 
-CSI_KEYWORDS = {
-    "01": ["general requirement", "mobilization"],
-    "03": ["concrete", "slab", "footing"],
-    "04": ["masonry", "brick", "block", "cmu"],
-    "05": ["steel", "metal deck", "joist"],
-    "06": ["wood", "framing", "carpentry"],
-    "07": ["insulation", "roof", "moisture", "flashing"],
-    "08": ["door", "window", "frame", "hardware"],
-    "09": ["drywall", "paint", "ceiling", "flooring", "tile", "acoustical"],
-    "10": ["toilet accessory", "specialty", "locker"],
-    "11": ["equipment", "kitchen hood"],
-    "12": ["furniture", "casework", "countertop"],
-    "13": ["pre-engineered building", "dome"],
-    "14": ["elevator", "lift"],
-    "21": ["sprinkler", "fire suppression"],
-    "22": ["plumbing", "pipe", "fixture"],
-    "23": ["hvac", "duct", "air handler"],
-    "26": ["electrical", "conduit", "lighting", "panel"]
-}
-
-@app.post("/api/parse-takeoff")
-async def parse_takeoff(files: List[UploadFile] = File(...)):
-    parsed_items = []
-
-    regex_patterns = [
-        re.compile(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", re.IGNORECASE),
-        re.compile(r"(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", re.IGNORECASE)  # Fallback: no code
-    ]
-
+@app.post("/api/generate-summary")
+async def generate_summary(files: List[UploadFile] = File(...)):
+    full_text = ""
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
-
         for page in doc:
-            lines = page.get_text().splitlines()
-            for line in lines:
-                line = line.strip()
-                if not line or len(line.split()) < 3:
-                    continue
-
-                match = None
-                for pattern in regex_patterns:
-                    match = pattern.match(line)
-                    if match:
-                        break
-
-                if match:
-                    groups = match.groups()
-                    if len(groups) == 4:
-                        code, description, quantity, unit = groups
-                    else:
-                        code = "N/A"
-                        description, quantity, unit = groups
-
-                    description = description.strip()
-                    quantity = quantity.replace(",", "")
-                    unit = unit.upper()
-
-                    division = "Unknown"
-                    for div, keywords in CSI_KEYWORDS.items():
-                        if any(kw in description.lower() for kw in keywords) or any(kw in code.lower() for kw in keywords):
-                            division = div
-                            break
-
-                    issue = None
-                    try:
-                        float(quantity)
-                    except ValueError:
-                        issue = "Invalid quantity format"
-
-                    parsed_items.append({
-                        "division": division,
-                        "description": description,
-                        "quantity": quantity,
-                        "unit": unit,
-                        "unitCost": 0,
-                        "modifier": 0,
-                        "customTotal": None,
-                        "useCustomTotal": False,
-                        "issue": issue
-                    })
+            full_text += page.get_text()
         doc.close()
-
-    return {"takeoff": parsed_items}
-
-class ChatRequest(BaseModel):
-    discussion: list
-    project_data: dict
-
-@app.post("/api/chat")
-async def chat(request: ChatRequest):
-    messages = [
-        {"role": "system", "content": "You are Estimator GPT, a professional construction estimator. Be clear, concise, and helpful."}
-    ]
-
-    for msg in request.discussion:
-        role = "user" if msg["sender"] == "User" else "assistant"
-        messages.append({"role": role, "content": msg["text"]})
-
-    scopes = request.project_data.get("quotes", [])
-    takeoff = request.project_data.get("takeoff", [])
-
-    if scopes or takeoff:
-        scope_text = "\n".join(f"{q['title']}: {q.get('summary', '')}" for q in scopes)
-        takeoff_text = "\n".join(f"{t['division']} {t['description']} – Qty: {t['quantity']} {t['unit']} @ ${t['unitCost']}" for t in takeoff)
-        messages.append({
-            "role": "system",
-            "content": f"Scopes:\n{scope_text}\n\nTakeoff:\n{takeoff_text}"
-        })
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=messages,
-            temperature=0.4
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an experienced architect. Read the project documentation and provide a detailed project summary suitable for a general contractor. Focus on the overall design intent, materials, finishes, and unique features."
+                },
+                {
+                    "role": "user",
+                    "content": full_text[:12000]  # limit input to 12k characters for performance
+                }
+            ],
+            temperature=0.5
         )
         reply = response.choices[0].message.content.strip()
+        return {"summary": reply}
     except Exception as e:
-        reply = f"Error generating response: {str(e)}"
-
-    return {"reply": reply}
+        return {"summary": f"Error generating summary: {str(e)}"}
