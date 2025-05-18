@@ -164,7 +164,7 @@ async def generate_summary(files: List[UploadFile] = File(...)):
                 },
                 {
                     "role": "user",
-                    "content": full_text[:12000]  # limit input to 12k characters for performance
+                    "content": full_text[:12000]
                 }
             ],
             temperature=0.5
@@ -173,3 +173,38 @@ async def generate_summary(files: List[UploadFile] = File(...)):
         return {"summary": reply}
     except Exception as e:
         return {"summary": f"Error generating summary: {str(e)}"}
+
+@app.post("/api/parse-specs")
+async def parse_specs(files: List[UploadFile] = File(...)):
+    full_text = ""
+    for file in files:
+        content = await file.read()
+        doc = fitz.open(stream=content, filetype="pdf")
+        for page in doc:
+            full_text += page.get_text()
+        doc.close()
+
+    try:
+        prompt = """You are a construction estimator. Read the project manual below and generate a brief but specific summary for each of the following CSI divisions. Use only content from the manual. If no information is found for a division, write 'Not specified.' Format the response as JSON:
+
+{
+  '03': 'Concrete summary here...',
+  '09': 'Finishes summary here...',
+  '22': 'Plumbing summary here...'
+}
+
+Manual:
+""" + full_text[:12000]
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You extract division summaries from construction manuals."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4
+        )
+        reply = response.choices[0].message.content.strip()
+        return {"divisionDescriptions": reply}
+    except Exception as e:
+        return {"divisionDescriptions": f"Error: {str(e)}"}
