@@ -7,6 +7,7 @@ import fitz  # PyMuPDF
 import re
 import os
 import uuid
+import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
@@ -22,6 +23,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logging.basicConfig(filename="quote_parsing.log", level=logging.INFO, format="%(asctime)s - %(message)s")
 
 @app.get("/")
 def root():
@@ -40,6 +43,7 @@ async def upload_file(file: UploadFile = File(...)):
         with open(filepath, "wb") as f:
             content = await file.read()
             f.write(content)
+        logging.info(f"Uploaded file: {filename}")
         return {"fileId": file_id}
     except Exception as e:
         return {"detail": f"Failed to save file {file.filename}: {str(e)}"}
@@ -60,8 +64,20 @@ async def delete_file(file_id: str):
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             if os.path.exists(filepath):
                 os.remove(filepath)
+                logging.info(f"Deleted file: {filename}")
                 return {"message": "File deleted successfully"}
     return {"detail": "File not found"}
+
+@app.post("/api/extract-text")
+async def extract_text(files: List[UploadFile] = File(...)):
+    full_text = ""
+    for file in files:
+        content = await file.read()
+        doc = fitz.open(stream=content, filetype="pdf")
+        for page in doc:
+            full_text += page.get_text()
+        doc.close()
+    return {"text": full_text}
 
 CSI_DIVISIONS = [
     ("01", "General Requirements"),
@@ -89,6 +105,15 @@ CSI_DIVISIONS = [
     ("32", "Exterior Improvements"),
     ("33", "Utilities")
 ]
+
+DIVISION_KEYWORDS = {
+    "03": ["concrete", "slab", "footing"],
+    "08": ["door", "window", "glazing"],
+    "09": ["paint", "drywall", "gypsum", "finish", "flooring"],
+    "22": ["plumbing", "fixture", "pipe"],
+    "23": ["hvac", "mechanical", "ventilation", "air handler"],
+    "26": ["electrical", "receptacle", "lighting", "panel"]
+}
 
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
@@ -129,134 +154,24 @@ async def parse_structured(files: List[UploadFile] = File(...)):
 
         doc.close()
 
-    quotes = [
-        {
+    quotes = []
+    for div, name in CSI_DIVISIONS:
+        summary = "Not detected"
+        for keyword in DIVISION_KEYWORDS.get(div, []):
+            if keyword in full_text:
+                summary = f"{name} scope detected based on presence of '{keyword}'"
+                break
+        quotes.append({
             "id": div,
             "title": name,
-            "summary": "Placeholder for GPT",
+            "summary": summary,
             "cost": 0,
             "markup": 10,
             "finalPrice": 0
-        } for div, name in CSI_DIVISIONS
-    ]
+        })
 
+    logging.info(f"Structured parsing completed. Suggested project name: {suggested_name}")
     return {
         "quotes": quotes,
         "suggestedProjectName": suggested_name
     }
-
-@app.post("/api/generate-summary")
-async def generate_summary(files: List[UploadFile] = File(...)):
-    full_text = ""
-    for file in files:
-        content = await file.read()
-        doc = fitz.open(stream=content, filetype="pdf")
-        for page in doc:
-            full_text += page.get_text()
-        doc.close()
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an experienced architect. Read the project documentation and provide a detailed project summary suitable for a general contractor. Focus on the overall design intent, materials, finishes, and unique features."
-                },
-                {
-                    "role": "user",
-                    "content": full_text[:12000]
-                }
-            ],
-            temperature=0.5
-        )
-        reply = response.choices[0].message.content.strip()
-        return {"summary": reply}
-    except Exception as e:
-        return {"summary": f"Error generating summary: {str(e)}"}
-
-@app.post("/api/parse-specs")
-async def parse_specs(files: List[UploadFile] = File(...)):
-    full_text = ""
-    for file in files:
-        content = await file.read()
-        doc = fitz.open(stream=content, filetype="pdf")
-        for page in doc:
-            full_text += page.get_text()
-        doc.close()
-
-    try:
-        prompt = """You are a construction estimator. Read the project manual below and generate a brief but specific summary for each of the following CSI divisions. Use only content from the manual. If no information is found for a division, write 'Not specified.' Format the response as JSON:
-
-{
-  '03': 'Concrete summary here...',
-  '09': 'Finishes summary here...',
-  '22': 'Plumbing summary here...'
-}
-
-Manual:
-""" + full_text[:12000]
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You extract division summaries from construction manuals."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.4
-        )
-        reply = response.choices[0].message.content.strip()
-        return {"divisionDescriptions": reply}
-    except Exception as e:
-        return {"divisionDescriptions": f"Error: {str(e)}"}
-
-@app.post("/api/analyze-division/{division_id}")
-async def analyze_division(division_id: str, request: Request):
-    body = await request.json()
-    quotes = body.get("quotes", [])
-    takeoff = body.get("takeoff", [])
-    specs = body.get("specs", {})
-
-    division_quote = next((q for q in quotes if q["id"] == division_id), None)
-    division_takeoff = [t for t in takeoff if t["division"] == division_id]
-    division_specs = specs.get(division_id, "")
-
-    summary_text = division_quote.get("summary", "") if division_quote else ""
-
-    prompt = f"""
-Analyze Division {division_id} in this construction estimate.
-
-Quote Summary:
-{summary_text or 'None provided'}
-
-Specs:
-{division_specs or 'Not specified'}
-
-Takeoff Items:
-"""
-    for t in division_takeoff:
-        line = f"- {t['description']} | Qty: {t['quantity']} {t['unit']} @ ${t['unitCost']}"
-        prompt += f"{line}\n"
-
-    prompt += """
-
-Provide a short analysis:
-- What scope is clearly covered?
-- What appears to be missing?
-- Any unusual or risky exclusions?
-Be concise and accurate.
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a construction estimator reviewing one division in detail."},
-                {"role": "user", "content": prompt[:12000]}
-            ],
-            temperature=0.4
-        )
-        reply = response.choices[0].message.content.strip()
-        return {"analysis": reply}
-    except Exception as e:
-        return {"analysis": f"Error: {str(e)}"}
