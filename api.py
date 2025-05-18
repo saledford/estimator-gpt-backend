@@ -168,6 +168,11 @@ CSI_KEYWORDS = {
 async def parse_takeoff(files: List[UploadFile] = File(...)):
     parsed_items = []
 
+    regex_patterns = [
+        re.compile(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", re.IGNORECASE),
+        re.compile(r"(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", re.IGNORECASE)  # Fallback: no code
+    ]
+
     for file in files:
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
@@ -175,16 +180,31 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
         for page in doc:
             lines = page.get_text().splitlines()
             for line in lines:
-                match = re.search(r"(\w+-?\w*)\s+(.+?)\s+(\d+[\d.,]*)\s+(EA|LF|SF|CY|PR)", line, re.IGNORECASE)
+                line = line.strip()
+                if not line or len(line.split()) < 3:
+                    continue
+
+                match = None
+                for pattern in regex_patterns:
+                    match = pattern.match(line)
+                    if match:
+                        break
+
                 if match:
-                    code = match.group(1)
-                    description = match.group(2).strip()
-                    quantity = match.group(3).replace(",", "")
-                    unit = match.group(4).upper()
+                    groups = match.groups()
+                    if len(groups) == 4:
+                        code, description, quantity, unit = groups
+                    else:
+                        code = "N/A"
+                        description, quantity, unit = groups
+
+                    description = description.strip()
+                    quantity = quantity.replace(",", "")
+                    unit = unit.upper()
 
                     division = "Unknown"
                     for div, keywords in CSI_KEYWORDS.items():
-                        if any(kw in description.lower() for kw in keywords):
+                        if any(kw in description.lower() for kw in keywords) or any(kw in code.lower() for kw in keywords):
                             division = div
                             break
 
