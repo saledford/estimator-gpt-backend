@@ -244,13 +244,20 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             logger.error(f"Error extracting text for summary from {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
 
+    # Truncate text to 12,000 characters and log token estimates
+    estimated_tokens = len(full_text.split()) * 1.33
+    logger.warning(f"Token estimate before truncation: {estimated_tokens:.0f}")
+    full_text_truncated = full_text[:12000]
+    estimated_tokens_after = len(full_text_truncated.split()) * 1.33
+    logger.warning(f"Token estimate after truncation: {estimated_tokens_after:.0f}")
+
     try:
         prompt = (
             "You are an architect tasked with summarizing a construction project based on the provided specifications. "
             "Generate a concise, professional summary of the project in a narrative style, focusing on key aspects such as "
             "the type of project, major divisions involved (e.g., concrete, HVAC, electrical), and any notable features. "
             "The summary should be 2-3 sentences long.\n\n"
-            f"Project Specifications:\n{full_text}\n\n"
+            f"Project Specifications:\n{full_text_truncated}\n\n"
             "Summary:"
         )
         response = client.chat.completions.create(
@@ -288,6 +295,13 @@ async def parse_specs(files: List[UploadFile] = File(...)):
             logger.error(f"Error extracting text for specs from {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
 
+    # Truncate text to 12,000 characters and log token estimates
+    estimated_tokens = len(full_text.split()) * 1.33
+    logger.warning(f"Token estimate before truncation: {estimated_tokens:.0f}")
+    full_text_truncated = full_text[:12000]
+    estimated_tokens_after = len(full_text_truncated.split()) * 1.33
+    logger.warning(f"Token estimate after truncation: {estimated_tokens_after:.0f}")
+
     try:
         prompt = (
             "You are a construction project analyst tasked with extracting detailed specifications for CSI divisions from project documents. "
@@ -295,7 +309,7 @@ async def parse_specs(files: List[UploadFile] = File(...)):
             "Return a dictionary where keys are division IDs (e.g., '03', '09') and values are detailed descriptions of the specifications for that division. "
             "If a division is not mentioned, exclude it from the dictionary. "
             "Focus on materials, methods, and notable features.\n\n"
-            f"Project Text:\n{full_text}\n\n"
+            f"Project Text:\n{full_text_truncated}\n\n"
             "Specifications by Division (as a JSON dictionary):"
         )
         response = client.chat.completions.create(
@@ -346,6 +360,13 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
             logger.error(f"Error extracting text for takeoff from {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
 
+    # Truncate text to 12,000 characters and log token estimates
+    estimated_tokens = len(full_text.split()) * 1.33
+    logger.warning(f"Token estimate before truncation: {estimated_tokens:.0f}")
+    full_text_truncated = full_text[:12000]
+    estimated_tokens_after = len(full_text_truncated.split()) * 1.33
+    logger.warning(f"Token estimate after truncation: {estimated_tokens_after:.0f}")
+
     try:
         prompt = (
             "You are a construction estimator tasked with extracting takeoff data from project documents. "
@@ -353,7 +374,7 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
             "Return a list of takeoff items in JSON format, where each item has the following fields: "
             "division (CSI division ID, e.g., '03'), description (item description), quantity (numeric), unit (e.g., 'sqft'), unitCost (numeric), modifier (percentage, default 0 if not specified). "
             "If no takeoff data is found, return an empty list.\n\n"
-            f"Project Text:\n{full_text}\n\n"
+            f"Project Text:\n{full_text_truncated}\n\n"
             "Takeoff Items (as a JSON list):"
         )
         response = client.chat.completions.create(
