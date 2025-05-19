@@ -8,6 +8,7 @@ import re
 import os
 import uuid
 import logging
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
@@ -34,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @app.get("/")
-def root():
+async def root():
     return {"message": "Estimator GPT backend is running"}
 
 UPLOAD_FOLDER = "temp_uploads"
@@ -521,7 +522,7 @@ async def submit_feedback(feedback: dict):
             "oldValue": old_value,
             "newValue": new_value,
             "note": note,
-            "timestamp": new Date().toISOString(),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
         }
         feedback_storage.append(feedback_entry)
         logger.info(f"Feedback received for item {item_id}: {change_type} changed from {old_value} to {new_value} – {note}")
