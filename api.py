@@ -40,8 +40,9 @@ def root():
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# In-memory storage for files (replace with a database in production)
+# In-memory storage for files and feedback (replace with a database in production)
 files_storage: Dict[str, str] = {}  # {file_id: file_path}
+feedback_storage: List[Dict] = []  # Store feedback for Takeoff items
 
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
@@ -270,9 +271,6 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             temperature=0.7
         )
         summary = response.choices[0].message.content.strip()
-        if not summary:
-            logger.error("Empty summary received from GPT")
-            raise ValueError("Empty summary received from GPT")
         logger.info("Project summary generated successfully")
         return {"summary": summary}
     except Exception as e:
@@ -311,11 +309,9 @@ async def parse_specs(files: List[UploadFile] = File(...)):
             "Analyze the provided text and identify specifications for each CSI division present. "
             "Return a dictionary where keys are division IDs (e.g., '03', '09') and values are detailed descriptions of the specifications for that division. "
             "If a division is not mentioned, exclude it from the dictionary. "
-            "Focus on materials, methods, and notable features. "
-            "Respond in strict JSON format without markdown or extra text. Example structure:\n"
-            "{\"03\": \"Concrete specifications including...\", \"09\": \"Finishes specifications including...\"}\n\n"
+            "Focus on materials, methods, and notable features.\n\n"
             f"Project Text:\n{full_text_truncated}\n\n"
-            "Specifications by Division:"
+            "Specifications by Division (as a JSON dictionary):"
         )
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -327,39 +323,24 @@ async def parse_specs(files: List[UploadFile] = File(...)):
             temperature=0.5
         )
         descriptions_raw = response.choices[0].message.content.strip()
-        if not descriptions_raw:
-            logger.error("Empty response received from GPT for specs parsing")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Empty response received from GPT"}
-            )
-        logger.debug(f"Raw GPT response for specs: {descriptions_raw}")
         # Attempt to parse the response as JSON
         try:
             descriptions = json.loads(descriptions_raw)
             if not isinstance(descriptions, dict):
                 raise ValueError("Response is not a dictionary")
         except json.JSONDecodeError:
-            # Try to clean and parse
+            # If JSON parsing fails, try to clean and parse
             descriptions_raw = descriptions_raw.replace("'", '"')
             try:
                 descriptions = json.loads(descriptions_raw)
-                if not isinstance(descriptions, dict):
-                    raise ValueError("Response is not a dictionary")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse GPT response as JSON: {descriptions_raw}")
-                return JSONResponse(
-                    status_code=500,
-                    content={"detail": f"Failed to parse GPT response: {str(e)}"}
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to parse GPT response: {str(e)}")
         logger.info(f"Parsed specifications for {len(descriptions)} divisions")
         return {"descriptions": str(descriptions)}  # Return as string to match frontend expectation
     except Exception as e:
         logger.error(f"Error parsing specs: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"Error parsing specs: {str(e)}"}
-        )
+        raise HTTPException(status_code=500, detail=f"Error parsing specs: {str(e)}")
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
@@ -391,13 +372,11 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
         prompt = (
             "You are a construction estimator tasked with extracting takeoff data from project documents. "
             "Analyze the provided text and identify takeoff items, including division, description, quantity, unit, unit cost, and modifier. "
-            "Return a list of takeoff items in strict JSON format, where each item has the following fields: "
+            "Return a list of takeoff items in JSON format, where each item has the following fields: "
             "division (CSI division ID, e.g., '03'), description (item description), quantity (numeric), unit (e.g., 'sqft'), unitCost (numeric), modifier (percentage, default 0 if not specified). "
-            "If no takeoff data is found, return an empty list. "
-            "Respond in strict JSON format without markdown or extra text. Example structure:\n"
-            "[{\"division\": \"03\", \"description\": \"Concrete slab\", \"quantity\": 1000, \"unit\": \"sqft\", \"unitCost\": 5.0, \"modifier\": 0}, ...]\n\n"
+            "If no takeoff data is found, return an empty list.\n\n"
             f"Project Text:\n{full_text_truncated}\n\n"
-            "Takeoff Items:"
+            "Takeoff Items (as a JSON list):"
         )
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -409,39 +388,23 @@ async def parse_takeoff(files: List[UploadFile] = File(...)):
             temperature=0.5
         )
         takeoff_raw = response.choices[0].message.content.strip()
-        if not takeoff_raw:
-            logger.error("Empty response received from GPT for takeoff parsing")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Empty response received from GPT"}
-            )
-        logger.debug(f"Raw GPT response for takeoff: {takeoff_raw}")
-        # Attempt to parse the response as JSON
         try:
             takeoff = json.loads(takeoff_raw)
             if not isinstance(takeoff, list):
                 raise ValueError("Response is not a list")
         except json.JSONDecodeError:
-            # Try to clean and parse
             takeoff_raw = takeoff_raw.replace("'", '"')
             try:
                 takeoff = json.loads(takeoff_raw)
-                if not isinstance(takeoff, list):
-                    raise ValueError("Response is not a list")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse takeoff response as JSON: {takeoff_raw}")
-                return JSONResponse(
-                    status_code=500,
-                    content={"detail": f"Failed to parse takeoff response: {str(e)}"}
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to parse takeoff response: {str(e)}")
+
         logger.info(f"Parsed {len(takeoff)} takeoff items")
         return {"takeoff": takeoff}
     except Exception as e:
         logger.error(f"Error parsing takeoff: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"Error parsing takeoff: {str(e)}"}
-        )
+        raise HTTPException(status_code=500, detail=f"Error parsing takeoff: {str(e)}")
 
 class DivisionAnalysisRequest(BaseModel):
     quotes: List[Dict]
@@ -466,14 +429,12 @@ async def analyze_division(division_id: str, request: DivisionAnalysisRequest):
             "Identify any potential issues, such as unusually low costs, missing takeoff items, or discrepancies between specs and takeoff. "
             "Return a dictionary with a 'quote' field containing any warnings about the quote (e.g., 'Cost seems unusually low'), "
             "and a 'takeoff' field containing warnings about takeoff items (e.g., 'Quantity seems off'). "
-            "If no issues are found, return empty strings for each field. "
-            "Respond in strict JSON format without markdown or extra text. Example structure:\n"
-            "{\"quote\": \"Cost seems unusually low\", \"takeoff\": \"Quantity seems off\"}\n\n"
+            "If no issues are found, return empty strings for each field.\n\n"
             f"Division ID: {division_id}\n"
             f"Quote: {json.dumps(quote)}\n"
             f"Takeoff Items: {json.dumps(takeoff)}\n"
             f"Specifications: {specs}\n\n"
-            "Analysis:"
+            "Analysis (as a JSON dictionary):"
         )
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -485,13 +446,6 @@ async def analyze_division(division_id: str, request: DivisionAnalysisRequest):
             temperature=0.5
         )
         analysis_raw = response.choices[0].message.content.strip()
-        if not analysis_raw:
-            logger.error("Empty response received from GPT for division analysis")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Empty response received from GPT"}
-            )
-        logger.debug(f"Raw GPT response for division analysis: {analysis_raw}")
         try:
             analysis = json.loads(analysis_raw)
             if not isinstance(analysis, dict):
@@ -502,24 +456,15 @@ async def analyze_division(division_id: str, request: DivisionAnalysisRequest):
             analysis_raw = analysis_raw.replace("'", '"')
             try:
                 analysis = json.loads(analysis_raw)
-                if not isinstance(analysis, dict):
-                    raise ValueError("Response is not a dictionary")
-                if "quote" not in analysis or "takeoff" not in analysis:
-                    raise ValueError("Response must contain 'quote' and 'takeoff' fields")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse analysis response as JSON: {analysis_raw}")
-                return JSONResponse(
-                    status_code=500,
-                    content={"detail": f"Failed to parse analysis response: {str(e)}"}
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to parse analysis response: {str(e)}")
+
         logger.info(f"Analysis completed for division {division_id}: {analysis}")
         return {"warnings": analysis}
     except Exception as e:
         logger.error(f"Error analyzing division {division_id}: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"Error analyzing division {division_id}: {str(e)}"}
-        )
+        raise HTTPException(status_code=500, detail=f"Error analyzing division {division_id}: {str(e)}")
 
 class ChatRequest(BaseModel):
     discussion: List[Dict]
@@ -551,17 +496,73 @@ async def chat(request: ChatRequest):
             temperature=0.7
         )
         reply = response.choices[0].message.content.strip()
-        if not reply:
-            logger.error("Empty response received from GPT for chat")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Empty response received from GPT"}
-            )
         logger.info(f"Chat response generated: {reply}")
         return {"reply": reply}
     except Exception as e:
         logger.error(f"Error in chat: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
+
+@app.post("/api/submit-feedback")
+async def submit_feedback(feedback: dict):
+    try:
+        item_id = feedback.get("itemId")
+        change_type = feedback.get("type")
+        old_value = feedback.get("oldValue")
+        new_value = feedback.get("newValue")
+        note = feedback.get("note", "")
+
+        if not item_id or not change_type:
+            logger.error("Missing required feedback fields: itemId or type")
+            raise HTTPException(status_code=400, detail="Missing required fields: itemId or type")
+
+        feedback_entry = {
+            "itemId": item_id,
+            "type": change_type,
+            "oldValue": old_value,
+            "newValue": new_value,
+            "note": note,
+            "timestamp": new Date().toISOString(),
+        }
+        feedback_storage.append(feedback_entry)
+        logger.info(f"Feedback received for item {item_id}: {change_type} changed from {old_value} to {new_value} – {note}")
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Feedback submission failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+
+@app.post("/api/classify-item")
+async def classify_item(data: dict):
+    try:
+        description = data.get("description", "").strip()
+        if not description:
+            logger.error("Empty description provided for item classification")
+            raise HTTPException(status_code=400, detail="Description is required")
+
+        prompt = (
+            "You are a construction project analyst tasked with classifying a takeoff item into a CSI division. "
+            "Analyze the provided item description and return the most likely CSI division in the format 'Division XX – Title'. "
+            "Respond only with the division number and name, e.g., 'Division 26 – Electrical'. "
+            "If unsure, return an empty string.\n\n"
+            f"Item Description: {description}\n\n"
+            "Division:"
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a construction project analyst with expertise in CSI division classification."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.5
+        )
+
+        division = response.choices[0].message.content.strip()
+        logger.info(f"Classified item '{description}' as '{division}'")
+        return {"division": division}
+    except Exception as e:
+        logger.error(f"Item classification failed: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"detail": f"Error in chat: {str(e)}"}
+            content={"detail": f"Error classifying item: {str(e)}", "division": ""}
         )
