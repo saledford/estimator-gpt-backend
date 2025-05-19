@@ -70,3 +70,52 @@ This dictionary includes the divisions mentioned in the text along with their re
 []
 ```
 2025-05-19 07:35:22,647 - ERROR - Error parsing takeoff: 500: Failed to parse takeoff response: Expecting value: line 1 column 1 (char 0)
+2025-05-19 12:38:55,736 - ERROR - File not found: 9e64a51f-cd8c-404f-84ce-bc9800847d3e
+2025-05-19 12:38:55,741 - ERROR - File not found: 9e64a51f-cd8c-404f-84ce-bc9800847d3e
+2025-05-19 12:39:09,788 - ERROR - File not found for deletion: 9e64a51f-cd8c-404f-84ce-bc9800847d3e
+2025-05-19 12:40:31,291 - INFO - Uploaded file: 3d5aff7a-e8d6-4d05-bf23-90d503fc6ebd_100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf, File ID: 3d5aff7a-e8d6-4d05-bf23-90d503fc6ebd
+2025-05-19 12:40:39,541 - INFO - Extracted text from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 12:40:46,399 - INFO - Text extracted for summary from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 12:40:46,415 - WARNING - Token estimate before truncation: 39000
+2025-05-19 12:40:46,415 - WARNING - Token estimate after truncation: 2421
+2025-05-19 12:40:49,531 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 12:40:49,531 - INFO - Project summary generated successfully
+2025-05-19 12:40:56,350 - INFO - Text extracted for specs parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 12:40:56,350 - WARNING - Token estimate before truncation: 39000
+2025-05-19 12:40:56,350 - WARNING - Token estimate after truncation: 2421
+2025-05-19 12:41:02,998 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 12:41:02,998 - ERROR - Failed to parse GPT response as JSON: ```json
+{
+    "03": {
+        "specifications": "New ABA/ADA compliant concrete accessibility ramp with metal railing at new breezeway enclosure, new concrete landing at rear accessible entry way, and new 5" concrete sidewalk (30") & accessible route to handicap parking space."
+    },
+    "07": {
+        "specifications": "New liquid applied premium acrylic system over historic (Terne) metal substrate with a 15-year warranty (additional coat beyond base bid). New metal flashing at gable end and new louver at gable end T.M.E. New half-round aluminum gutters & downspouts on remainder of building and at breezeway enclosure."
+    },
+    "08": {
+        "specifications": "New double-hung wood window TME with all interior & exterior trim details TME. Infill masonry wall below new window T.M.E. Brick veneer, airspace, 1/2\" exterior sheathing, 2x4 wood studs, R-15 batt insulation, painted GWB interior. New brick & mortar T.M.E. to tooth in new brick into existing masonry wall."
+    },
+    "09": {
+        "specifications": "Repair of existing finishes including stained trim, refinishing of wood floors, repair of plaster & new paint on walls & ceilings. Paint all exterior wood trim, soffits, rafter tails, etc."
+    },
+    "22": {
+        "specifications": "New anti-freeze hose bibb location; see plumbing sheets."
+    },
+    "23": {
+        "specifications": "New outdoor HVAC unit location; see mechanical sheets. New mechanical units/conditioning in Multi-Use Rooms 110 and 106."
+    },
+    "26": {
+        "specifications": "New lighting fixtures and receptacles in Multi-Use Rooms 110 and 106."
+    }
+}
+```
+2025-05-19 12:41:02,998 - ERROR - Error parsing specs: 500: Failed to parse GPT response: Expecting value: line 1 column 1 (char 0)
+2025-05-19 12:41:09,569 - INFO - Structured parsing completed. Suggested project name: Please be aware that the following threatened species are in the project area:, Quotes: 24 divisions
+2025-05-19 12:41:15,987 - INFO - Text extracted for takeoff parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 12:41:16,003 - WARNING - Token estimate before truncation: 39000
+2025-05-19 12:41:16,003 - WARNING - Token estimate after truncation: 2421
+2025-05-19 12:41:17,944 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 12:41:17,944 - ERROR - Failed to parse takeoff response as JSON: ```json
+[]
+```
+2025-05-19 12:41:17,944 - ERROR - Error parsing takeoff: 500: Failed to parse takeoff response: Expecting value: line 1 column 1 (char 0)
