@@ -119,3 +119,75 @@ This dictionary includes the divisions mentioned in the text along with their re
 []
 ```
 2025-05-19 12:41:17,944 - ERROR - Error parsing takeoff: 500: Failed to parse takeoff response: Expecting value: line 1 column 1 (char 0)
+2025-05-19 13:01:57,245 - INFO - Uploaded file: 03cead82-4b2c-4c50-9500-f587e34e4d80_100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf, File ID: 03cead82-4b2c-4c50-9500-f587e34e4d80
+2025-05-19 13:02:05,020 - INFO - Extracted text from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 13:02:11,866 - INFO - Text extracted for summary from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 13:02:11,866 - WARNING - Token estimate before truncation: 39000
+2025-05-19 13:02:11,866 - WARNING - Token estimate after truncation: 2421
+2025-05-19 13:02:16,987 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 13:02:16,987 - INFO - Project summary generated successfully
+2025-05-19 13:02:23,757 - INFO - Text extracted for specs parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 13:02:23,773 - WARNING - Token estimate before truncation: 39000
+2025-05-19 13:02:23,773 - WARNING - Token estimate after truncation: 2421
+2025-05-19 13:02:33,344 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 13:02:33,344 - ERROR - Failed to parse GPT response as JSON: Based on the provided project text, I have extracted the specifications for the relevant CSI divisions. Here is a dictionary with the divisions and their corresponding specifications:
+
+```json
+{
+  "03": {
+    "description": "Concrete",
+    "specifications": [
+      "New ABA/ADA compliant concrete accessibility ramp with metal railing at new breezeway enclosure",
+      "New concrete landing at rear accessible entry way",
+      "New ABA/ADA compliant 5" sidewalk (30") & accessible route to handicap parking space"
+    ]
+  },
+  "07": {
+    "description": "Thermal and Moisture Protection",
+    "specifications": [
+      "New liquid applied premium acrylic system over historic (terne) metal substrate - 15 year warranty",
+      "New attic insulation throughout; R-38 batt with baffles",
+      "New insulation throughout existing wood framed floor assembly U-0.026 or R-30",
+      "New metal flashing at gable end"
+    ]
+  },
+  "09": {
+    "description": "Finishes",
+    "specifications": [
+      "Repair of existing finishes including stained trim, refinishing of wood floors, repair of plaster & new paint on walls & ceilings",
+      "Paint all exterior wood trim, soffits, rafter tails, etc."
+    ]
+  },
+  "22": {
+    "description": "Plumbing",
+    "specifications": [
+      "New anti-freeze hose bibb location",
+      "New plumbing fixture schedule & details"
+    ]
+  },
+  "23": {
+    "description": "Heating, Ventilating, and Air Conditioning (HVAC)",
+    "specifications": [
+      "New outdoor HVAC unit location"
+    ]
+  },
+  "26": {
+    "description": "Electrical",
+    "specifications": [
+      "New lighting fixtures and receptacles"
+    ]
+  }
+}
+```
+
+This JSON dictionary includes CSI divisions that were mentioned in the provided text, along with their relevant specifications focusing on materials, methods, and notable features.
+2025-05-19 13:02:33,344 - ERROR - Error parsing specs: 500: Failed to parse GPT response: Expecting value: line 1 column 1 (char 0)
+2025-05-19 13:02:39,910 - INFO - Structured parsing completed. Suggested project name: Please be aware that the following threatened species are in the project area:, Quotes: 24 divisions
+2025-05-19 13:02:46,297 - INFO - Text extracted for takeoff parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-19 13:02:46,297 - WARNING - Token estimate before truncation: 39000
+2025-05-19 13:02:46,297 - WARNING - Token estimate after truncation: 2421
+2025-05-19 13:02:47,260 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 13:02:47,280 - ERROR - Failed to parse takeoff response as JSON: ```json
+[]
+```
+2025-05-19 13:02:47,280 - ERROR - Error parsing takeoff: 500: Failed to parse takeoff response: Expecting value: line 1 column 1 (char 0)
