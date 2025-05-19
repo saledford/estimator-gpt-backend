@@ -1,0 +1,23 @@
+2025-05-18 18:29:57,436 - INFO - Uploaded file: eb1b93f8-66e3-472f-b17d-77f72068106e_100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed.pdf, File ID: eb1b93f8-66e3-472f-b17d-77f72068106e
+2025-05-18 18:30:05,546 - INFO - Text extracted for summary from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed.pdf
+2025-05-18 18:30:08,995 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:08,995 - INFO - Retrying request to /chat/completions in 0.467829 seconds
+2025-05-18 18:30:09,591 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:09,602 - INFO - Retrying request to /chat/completions in 0.764798 seconds
+2025-05-18 18:30:10,446 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:10,446 - ERROR - Error generating summary: Error code: 429 - {'error': {'message': 'Request too large for gpt-4o in organization org-Abg1CwxHTYX7ZGuHWzFSNHvA on tokens per min (TPM): Limit 30000, Requested 45837. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+2025-05-18 18:30:17,183 - INFO - Text extracted for specs parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed.pdf
+2025-05-18 18:30:17,492 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:17,492 - INFO - Retrying request to /chat/completions in 0.403156 seconds
+2025-05-18 18:30:18,001 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:18,001 - INFO - Retrying request to /chat/completions in 0.798497 seconds
+2025-05-18 18:30:18,896 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:18,896 - ERROR - Error parsing specs: Error code: 429 - {'error': {'message': 'Request too large for gpt-4o in organization org-Abg1CwxHTYX7ZGuHWzFSNHvA on tokens per min (TPM): Limit 30000, Requested 45870. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+2025-05-18 18:30:25,533 - INFO - Structured parsing completed. Suggested project name: Please be aware that the following threatened species are in the project area:, Quotes: 24 divisions
+2025-05-18 18:30:32,209 - INFO - Text extracted for takeoff parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed.pdf
+2025-05-18 18:30:32,560 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:32,560 - INFO - Retrying request to /chat/completions in 0.482679 seconds
+2025-05-18 18:30:33,245 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:33,245 - INFO - Retrying request to /chat/completions in 0.868728 seconds
+2025-05-18 18:30:34,240 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-18 18:30:34,240 - ERROR - Error parsing takeoff: Error code: 429 - {'error': {'message': 'Request too large for gpt-4o in organization org-Abg1CwxHTYX7ZGuHWzFSNHvA on tokens per min (TPM): Limit 30000, Requested 45882. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
