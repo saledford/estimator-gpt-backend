@@ -21,3 +21,52 @@
 2025-05-18 18:30:33,245 - INFO - Retrying request to /chat/completions in 0.868728 seconds
 2025-05-18 18:30:34,240 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
 2025-05-18 18:30:34,240 - ERROR - Error parsing takeoff: Error code: 429 - {'error': {'message': 'Request too large for gpt-4o in organization org-Abg1CwxHTYX7ZGuHWzFSNHvA on tokens per min (TPM): Limit 30000, Requested 45882. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+2025-05-19 07:33:57,961 - ERROR - File not found: eb1b93f8-66e3-472f-b17d-77f72068106e
+2025-05-19 07:33:57,961 - ERROR - File not found: eb1b93f8-66e3-472f-b17d-77f72068106e
+2025-05-19 07:33:59,772 - ERROR - File not found for deletion: eb1b93f8-66e3-472f-b17d-77f72068106e
+2025-05-19 07:34:40,642 - INFO - Uploaded file: 9e64a51f-cd8c-404f-84ce-bc9800847d3e_100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (1).pdf, File ID: 9e64a51f-cd8c-404f-84ce-bc9800847d3e
+2025-05-19 07:34:50,597 - INFO - Text extracted for summary from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (1).pdf
+2025-05-19 07:34:50,597 - WARNING - Token estimate before truncation: 39000
+2025-05-19 07:34:50,597 - WARNING - Token estimate after truncation: 2421
+2025-05-19 07:34:55,303 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 07:34:55,311 - INFO - Project summary generated successfully
+2025-05-19 07:35:01,662 - INFO - Text extracted for specs parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (1).pdf
+2025-05-19 07:35:01,669 - WARNING - Token estimate before truncation: 39000
+2025-05-19 07:35:01,669 - WARNING - Token estimate after truncation: 2421
+2025-05-19 07:35:09,014 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 07:35:09,015 - ERROR - Failed to parse GPT response as JSON: To extract the detailed specifications for each CSI division from the provided project text, we"ll analyze the text for mentions of specific divisions and their associated specifications. Below is the extracted information structured as a dictionary, where keys are division IDs and values are detailed descriptions of the specifications for that division:
+
+```json
+{
+    "03": {
+        "description": "New ABA/ADA compliant concrete accessibility ramp with metal railing at new breezeway enclosure. New concrete landing at rear accessible entry way. New ABA/ADA compliant 5" sidewalk (30") & accessible route to handicap parking space."
+    },
+    "07": {
+        "description": "New liquid applied premium acrylic system over historic (terne) metal substrate. New half-round aluminum gutters & downspouts on remainder of building. New metal flashing at gable end. Remove existing plywood and metal flashing. Install new vent; cementitious panel, new painted trim and new flashing."
+    },
+    "09": {
+        "description": "Repair of existing finishes including stained trim, refinishing of wood floors, repair of plaster & new paint on walls & ceilings. New attic insulation throughout; R-38 batt with baffles. New insulation throughout existing wood framed floor assembly U-0.026 or R-30. Paint all exterior wood trim, soffits, rafter tails, etc."
+    },
+    "22": {
+        "description": "New anti-freeze hose bibb location; see plumbing sheets."
+    },
+    "23": {
+        "description": "New outdoor HVAC unit location; see mechanical sheets. New mechanical units/conditioning in multi-use rooms 110 and 106."
+    },
+    "26": {
+        "description": "New lighting fixtures and receptacles in multi-use rooms 110 and 106."
+    }
+}
+```
+
+This dictionary includes the divisions mentioned in the text along with their relevant specifications, focusing on materials, methods, and notable features. If a division was not mentioned in the text, it has been excluded from the dictionary.
+2025-05-19 07:35:09,015 - ERROR - Error parsing specs: 500: Failed to parse GPT response: Expecting value: line 1 column 1 (char 0)
+2025-05-19 07:35:15,603 - INFO - Structured parsing completed. Suggested project name: Please be aware that the following threatened species are in the project area:, Quotes: 24 divisions
+2025-05-19 07:35:21,846 - INFO - Text extracted for takeoff parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (1).pdf
+2025-05-19 07:35:21,859 - WARNING - Token estimate before truncation: 39000
+2025-05-19 07:35:21,860 - WARNING - Token estimate after truncation: 2421
+2025-05-19 07:35:22,646 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 07:35:22,647 - ERROR - Failed to parse takeoff response as JSON: ```json
+[]
+```
+2025-05-19 07:35:22,647 - ERROR - Error parsing takeoff: 500: Failed to parse takeoff response: Expecting value: line 1 column 1 (char 0)
