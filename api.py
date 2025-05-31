@@ -156,6 +156,46 @@ DIVISION_KEYWORDS = {
     "23": ["hvac", "mechanical", "ventilation", "air handler"],
     "26": ["electrical", "receptacle", "lighting", "panel"]
 }
+@app.post("/api/extract-divisions")
+async def extract_divisions(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    full_text = ""
+    suggested_name = ""
+
+    try:
+        for file in files:
+            content = await file.read()
+            doc = fitz.open(stream=content, filetype="pdf")
+
+            for page in doc:
+                full_text += page.get_text().lower()
+
+            # Try to extract project name from page 1
+            if doc.page_count > 0 and not suggested_name:
+                first_page = doc.load_page(0)
+                lines = first_page.get_text().splitlines()
+                for line in lines:
+                    if 15 < len(line.strip()) < 80:
+                        suggested_name = line.strip()
+                        break
+            doc.close()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to extract divisions: {str(e)}")
+
+    detected = []
+    for div, name in CSI_DIVISIONS:
+        for keyword in DIVISION_KEYWORDS.get(div, []):
+            if keyword in full_text:
+                detected.append({"id": div, "title": name})
+                break
+
+    return {
+        "divisions": detected,
+        "suggestedProjectName": suggested_name or "Unnamed Project"
+    }
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
