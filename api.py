@@ -322,8 +322,10 @@ async def parse_specs(files: List[UploadFile] = File(...)):
     prompt = (
         "You are a construction analyst tasked with extracting detailed specifications by CSI Division. "
         "Return a JSON dictionary where keys are CSI division numbers (e.g., '03', '09') and values are detailed descriptions. "
-        "Exclude divisions not mentioned.\n\n"
-        f"Project Text:\n{full_text[:12000]}\n\nSpecifications (as JSON):"
+        "Only include divisions actually mentioned. "
+        "Respond only with valid JSON. Do not explain anything.\n\n"
+        f"Project Text:\n{full_text}\n\n"
+        "Specifications (as JSON):"
     )
 
     try:
@@ -337,18 +339,23 @@ async def parse_specs(files: List[UploadFile] = File(...)):
             temperature=0.5
         )
         raw = response.choices[0].message.content.strip()
+        logger.warning(f"Raw GPT response for specs:\n{raw}")
         try:
-            parsed = json.loads(raw.replace("'", '"'))
-            if not isinstance(parsed, dict):
-                raise ValueError("Specs must be a dictionary")
-            logger.info(f"Parsed specifications for {len(parsed)} divisions")
-            return {"descriptions": parsed}
-        except Exception as e:
-            logger.error(f"Error parsing specs response: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error parsing specs: {str(e)}")
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            raw = raw.replace("'", '"').strip()
+            if not raw or raw[0] not in ['{', '[']:
+                logger.warning("GPT returned invalid or empty JSON response for specs")
+                return {"descriptions": "{}"}
+            parsed = json.loads(raw)
+
+        if not isinstance(parsed, dict):
+            raise ValueError("Specs must be a dictionary")
+        logger.info(f"Parsed specifications for {len(parsed)} divisions")
+        return {"descriptions": json.dumps(parsed)}
     except Exception as e:
-        logger.error(f"Error generating specs: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating specs: {str(e)}")
+        logger.error(f"Error parsing specs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error parsing specs: {str(e)}")
 
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
