@@ -41,13 +41,12 @@ async def root():
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# In-memory storage for files and feedback (replace with a database in production)
-files_storage: Dict[str, str] = {}  # {file_id: file_path}
-feedback_storage: List[Dict] = []  # Store feedback for Takeoff items
+files_storage: Dict[str, str] = {}
+feedback_storage: List[Dict] = []
 
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(('.pdf', '.xlsx')):
+    if not file.filename.lower().endswith((".pdf", ".xlsx")):
         logger.error(f"Invalid file type for {file.filename}: Only PDF and Excel files are allowed")
         raise HTTPException(status_code=400, detail="Only PDF and Excel files are allowed")
 
