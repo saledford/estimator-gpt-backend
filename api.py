@@ -8,7 +8,6 @@ import re
 import os
 import uuid
 import logging
-from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
@@ -35,14 +34,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @app.get("/")
-async def root():
+def root():
     return {"message": "Estimator GPT backend is running"}
 
 UPLOAD_FOLDER = "temp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-files_storage: Dict[str, str] = {}
-feedback_storage: List[Dict] = []
+files_storage: Dict[str, str] = {}  # {file_id: file_path}
 
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
@@ -100,53 +98,32 @@ async def delete_file(file_id: str):
         logger.error(f"Error deleting file {file_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/extract-text")
-async def extract_text(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for text extraction")
-        raise HTTPException(status_code=400, detail="No files provided")
-
-    full_text = ""
-    for file in files:
-        try:
-            content = await file.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text()
-            doc.close()
-            logger.info(f"Extracted text from file: {file.filename}")
-        except Exception as e:
-            logger.error(f"Error extracting text from {file.filename}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error extracting text from {file.filename}: {str(e)}")
-
-    return {"text": full_text}
-
-CSI_DIVISIONS = [
-    ("01", "General Requirements"),
-    ("02", "Existing Conditions"),
-    ("03", "Concrete"),
-    ("04", "Masonry"),
-    ("05", "Metals"),
-    ("06", "Wood, Plastics, and Composites"),
-    ("07", "Thermal and Moisture Protection"),
-    ("08", "Openings (Doors, Windows)"),
-    ("09", "Finishes"),
-    ("10", "Specialties"),
-    ("11", "Equipment"),
-    ("12", "Furnishings"),
-    ("13", "Special Construction"),
-    ("14", "Conveying Equipment (Elevators)"),
-    ("21", "Fire Suppression"),
-    ("22", "Plumbing"),
-    ("23", "HVAC"),
-    ("25", "Integrated Automation"),
-    ("26", "Electrical"),
-    ("27", "Communications"),
-    ("28", "Electronic Safety and Security"),
-    ("31", "Earthwork"),
-    ("32", "Exterior Improvements"),
-    ("33", "Utilities")
-]
+CSI_DIVISIONS = {
+    "01": "General Requirements",
+    "02": "Existing Conditions",
+    "03": "Concrete",
+    "04": "Masonry",
+    "05": "Metals",
+    "06": "Wood, Plastics, and Composites",
+    "07": "Thermal and Moisture Protection",
+    "08": "Openings (Doors, Windows)",
+    "09": "Finishes",
+    "10": "Specialties",
+    "11": "Equipment",
+    "12": "Furnishings",
+    "13": "Special Construction",
+    "14": "Conveying Equipment (Elevators)",
+    "21": "Fire Suppression",
+    "22": "Plumbing",
+    "23": "HVAC",
+    "25": "Integrated Automation",
+    "26": "Electrical",
+    "27": "Communications",
+    "28": "Electronic Safety and Security",
+    "31": "Earthwork",
+    "32": "Exterior Improvements",
+    "33": "Utilities"
+}
 
 DIVISION_KEYWORDS = {
     "03": ["concrete", "slab", "footing"],
@@ -156,6 +133,7 @@ DIVISION_KEYWORDS = {
     "23": ["hvac", "mechanical", "ventilation", "air handler"],
     "26": ["electrical", "receptacle", "lighting", "panel"]
 }
+
 @app.post("/api/extract-divisions")
 async def extract_divisions(files: List[UploadFile] = File(...)):
     if not files:
@@ -164,38 +142,100 @@ async def extract_divisions(files: List[UploadFile] = File(...)):
     full_text = ""
     suggested_name = ""
 
-    try:
-        for file in files:
+    for file in files:
+        try:
             content = await file.read()
             doc = fitz.open(stream=content, filetype="pdf")
 
             for page in doc:
                 full_text += page.get_text().lower()
 
-            # Try to extract project name from page 1
             if doc.page_count > 0 and not suggested_name:
                 first_page = doc.load_page(0)
-                lines = first_page.get_text().splitlines()
+                raw_text = first_page.get_text().strip()
+                lines = raw_text.splitlines()
+
+                candidates = []
                 for line in lines:
-                    if 15 < len(line.strip()) < 80:
-                        suggested_name = line.strip()
+                    clean = line.strip()
+                    if clean.isupper() and not any(k in clean.lower() for k in ["project", "renovation", "public works", "drawings", "school", "improvements"]):
+                        continue
+                    if len(clean) > 25 and not clean.lower().startswith(("jkf", "drawing", "project number")):
+                        candidates.append(clean)
+
+                priority_keywords = ["drawings for", "renovation", "public works", "school", "addition", "project", "improvements"]
+                for candidate in candidates:
+                    if any(keyword in candidate.lower() for keyword in priority_keywords):
+                        suggested_name = candidate
                         break
+
+                if not suggested_name and candidates:
+                    suggested_name = candidates[0]
+
+                if not suggested_name:
+                    suggested_name = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ").strip()
+
             doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error extracting from {file.filename}: {str(e)}")
 
+    detected_divisions = []
+    for div_id, keywords in DIVISION_KEYWORDS.items():
+        if any(keyword in full_text for keyword in keywords):
+            detected_divisions.append({
+                "id": div_id,
+                "title": CSI_DIVISIONS[div_id],
+                "summary": f"{CSI_DIVISIONS[div_id]} scope detected."
+            })
+
+    return {"divisions": detected_divisions, "suggestedProjectName": suggested_name}
+
+@app.post("/api/extract-takeoff/{division_id}")
+async def extract_takeoff(division_id: str, files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    if division_id not in CSI_DIVISIONS:
+        raise HTTPException(status_code=400, detail="Invalid division ID")
+
+    full_text = ""
+    for file in files:
+        try:
+            content = await file.read()
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error extracting from {file.filename}: {str(e)}")
+
+    try:
+        prompt = (
+            f"You are a construction estimator analyzing takeoff data for Division {division_id} – {CSI_DIVISIONS[division_id]}.\n"
+            f"Extract only takeoff items related to this division from the provided project text.\n"
+            "Return a JSON list where each item has: description, quantity, unit, unitCost, and modifier.\n"
+            f"Project Text:\n{full_text}\n\nTakeoff Items (JSON list):"
+        )
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a construction estimator parsing division-specific takeoff data."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.3
+        )
+        parsed = response.choices[0].message.content.strip()
+        try:
+            takeoff = json.loads(parsed.replace("'", '"'))
+            if not isinstance(takeoff, list):
+                raise ValueError("GPT response is not a list")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error parsing takeoff response: {str(e)}")
+
+        return {"takeoff": takeoff}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to extract divisions: {str(e)}")
-
-    detected = []
-    for div, name in CSI_DIVISIONS:
-        for keyword in DIVISION_KEYWORDS.get(div, []):
-            if keyword in full_text:
-                detected.append({"id": div, "title": name})
-                break
-
-    return {
-        "divisions": detected,
-        "suggestedProjectName": suggested_name or "Unnamed Project"
-    }
+        raise HTTPException(status_code=500, detail=f"Error generating takeoff: {str(e)}")
 
 @app.post("/api/parse-takeoff")
 async def parse_takeoff(files: List[UploadFile] = File(...)):
