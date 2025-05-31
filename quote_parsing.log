@@ -1183,3 +1183,112 @@ This dictionary covers the divisions mentioned in the text, focusing on material
 2025-05-31 19:00:30,826 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
 2025-05-31 19:00:30,826 - ERROR - Error parsing analysis response for division 33: Expecting value: line 1 column 1 (char 0)
 2025-05-31 19:00:30,826 - ERROR - Error analyzing division 33: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:12:25,001 - INFO - Uploaded file: a9a27edc-8136-4383-8931-6a4b9c8426ba_24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf, File ID: a9a27edc-8136-4383-8931-6a4b9c8426ba
+2025-05-31 19:12:26,317 - INFO - Retrieved file: a9a27edc-8136-4383-8931-6a4b9c8426ba_24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf, File ID: a9a27edc-8136-4383-8931-6a4b9c8426ba
+2025-05-31 19:12:26,394 - INFO - Retrieved file: a9a27edc-8136-4383-8931-6a4b9c8426ba_24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf, File ID: a9a27edc-8136-4383-8931-6a4b9c8426ba
+2025-05-31 19:12:32,200 - INFO - Text extracted from file: 24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf
+2025-05-31 19:12:32,221 - INFO - Retrieved file: a9a27edc-8136-4383-8931-6a4b9c8426ba_24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf, File ID: a9a27edc-8136-4383-8931-6a4b9c8426ba
+2025-05-31 19:12:37,967 - INFO - Text extracted for summary from file: 24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf
+2025-05-31 19:12:42,338 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:12:42,338 - INFO - Generated project summary: The City of Greenville Public Works building in Greenville, NC is undergoing a renovation project managed by JKF Architecture, with engineering support from Atlantec Engineers, PA for plumbing, mechanical, and electrical work, and Neser & Roomsburg, PA for structural engineering. The project, identified as JKF Project #2021-04D, involves comprehensive demolition and renovation of various building components including mechanical, electrical, plumbing, and fire alarm systems, with detailed plans and schedules outlined for each discipline to ensure a seamless integration of new systems into the existing structure.
+2025-05-31 19:12:42,357 - INFO - Retrieved file: a9a27edc-8136-4383-8931-6a4b9c8426ba_24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf, File ID: a9a27edc-8136-4383-8931-6a4b9c8426ba
+2025-05-31 19:12:48,132 - INFO - Text extracted for specs parsing from file: 24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf
+2025-05-31 19:12:54,064 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:12:54,074 - WARNING - Raw GPT response for specs:
+```json
+{
+    "03": "Concrete reinforcement, lap splice schedule, typical concrete pier detail, typical footing construction joint detail, typical new to existing footing connection, typical stepped footing detail.",
+    "05": "Steel details including tube steel and welded wire fabric.",
+    "07": "Fire retardant treated materials and insulation.",
+    "08": "Door types, frame types, door schedule, door group number, thickness, size, door opening, finish, material, door type, door frame elevation, glass details.",
+    "09": "Ceiling materials legend, wall materials/finish, room finish schedule, base materials, floor materials/finish, acoustical panel ceiling.",
+    "21": "Fire protection site plan.",
+    "22": "Plumbing demolition plan, plumbing renovation plan, plumbing notes, legend, schedule, and details.",
+    "23": "Mechanical schedules and details, mechanical demolition plan, mechanical renovation plan, mechanical roof plan, heating, ventilation, air conditioning.",
+    "26": "Electrical contractor, electrical notes, legend, light fixture schedule, lighting demolition plan, lighting plan, power demolition plan, power plan, power riser, panel, schedules, details.",
+    "27": "HVAC power plan.",
+    "28": "Fire alarm riser, legend, notes, details, fire alarm demolition plan, fire alarm plan."
+}
+```
+2025-05-31 19:12:54,074 - WARNING - GPT returned invalid or empty JSON response for specs
+2025-05-31 19:12:59,508 - INFO - Text extracted for structured parsing from file: 24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf
+2025-05-31 19:13:08,869 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:08,869 - WARNING - Failed to parse GPT quotes, falling back to keyword-based detection: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:14,485 - INFO - Text extracted for takeoff parsing from file: 24-25-35 Drawings for Greenville Public Works Renovation BID Drawing set (2).pdf
+2025-05-31 19:13:14,485 - INFO - Token estimate for takeoff parsing: 4158
+2025-05-31 19:13:16,012 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:16,012 - ERROR - Failed to parse takeoff response as JSON: ```json
+[]
+```
+2025-05-31 19:13:17,446 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:17,446 - ERROR - Error parsing analysis response for division 01: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:17,446 - ERROR - Error analyzing division 01: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:19,417 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:19,417 - ERROR - Error parsing analysis response for division 02: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:19,417 - ERROR - Error analyzing division 02: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:20,754 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:20,754 - ERROR - Error parsing analysis response for division 03: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:20,754 - ERROR - Error analyzing division 03: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:22,787 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:22,805 - ERROR - Error parsing analysis response for division 04: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:22,805 - ERROR - Error analyzing division 04: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:23,859 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:23,859 - ERROR - Error parsing analysis response for division 05: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:23,859 - ERROR - Error analyzing division 05: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:25,133 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:25,133 - ERROR - Error parsing analysis response for division 06: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:25,133 - ERROR - Error analyzing division 06: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:25,869 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:25,869 - ERROR - Error parsing analysis response for division 07: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:25,869 - ERROR - Error analyzing division 07: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:26,605 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:26,605 - ERROR - Error parsing analysis response for division 08: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:26,605 - ERROR - Error analyzing division 08: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:28,162 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:28,162 - ERROR - Error parsing analysis response for division 09: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:28,162 - ERROR - Error analyzing division 09: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:29,598 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:29,598 - ERROR - Error parsing analysis response for division 10: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:29,598 - ERROR - Error analyzing division 10: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:31,739 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:31,755 - ERROR - Error parsing analysis response for division 11: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:31,755 - ERROR - Error analyzing division 11: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:33,471 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:33,471 - ERROR - Error parsing analysis response for division 12: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:33,471 - ERROR - Error analyzing division 12: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:34,908 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:34,908 - ERROR - Error parsing analysis response for division 13: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:34,908 - ERROR - Error analyzing division 13: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:36,043 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:36,043 - ERROR - Error parsing analysis response for division 14: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:36,043 - ERROR - Error analyzing division 14: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:37,497 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:37,497 - ERROR - Error parsing analysis response for division 21: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:37,497 - ERROR - Error analyzing division 21: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:47,698 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:47,701 - ERROR - Error parsing analysis response for division 22: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:47,701 - ERROR - Error analyzing division 22: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:49,009 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:49,009 - ERROR - Error parsing analysis response for division 23: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:49,009 - ERROR - Error analyzing division 23: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:50,014 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:50,014 - ERROR - Error parsing analysis response for division 25: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:50,014 - ERROR - Error analyzing division 25: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:50,830 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:50,833 - ERROR - Error parsing analysis response for division 26: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:50,833 - ERROR - Error analyzing division 26: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:51,910 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:51,910 - ERROR - Error parsing analysis response for division 27: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:51,910 - ERROR - Error analyzing division 27: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:53,452 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:53,452 - ERROR - Error parsing analysis response for division 28: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:53,452 - ERROR - Error analyzing division 28: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:54,313 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:54,313 - ERROR - Error parsing analysis response for division 31: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:54,313 - ERROR - Error analyzing division 31: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:55,374 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:55,374 - ERROR - Error parsing analysis response for division 32: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:55,374 - ERROR - Error analyzing division 32: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:56,202 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 19:13:56,202 - ERROR - Error parsing analysis response for division 33: Expecting value: line 1 column 1 (char 0)
+2025-05-31 19:13:56,202 - ERROR - Error analyzing division 33: 500: Error parsing analysis response: Expecting value: line 1 column 1 (char 0)
