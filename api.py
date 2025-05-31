@@ -530,15 +530,20 @@ async def analyze_division(division_id: str, request: DivisionAnalysisRequest):
             temperature=0.5
         )
         analysis_raw = response.choices[0].message.content.strip()
+        logger.warning(f"Raw GPT response for division {division_id}:\n{analysis_raw}")
         try:
-            analysis = json.loads(analysis_raw.replace("'", '"'))
-            if not isinstance(analysis, dict) or "quote" not in analysis or "takeoff" not in analysis:
-                raise ValueError("Response must be a dictionary with 'quote' and 'takeoff' fields")
-            logger.info(f"Analysis completed for division {division_id}: {analysis}")
-            return {"warnings": analysis}
-        except Exception as e:
-            logger.error(f"Error parsing analysis response for division {division_id}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error parsing analysis response: {str(e)}")
+            analysis = json.loads(analysis_raw)
+        except json.JSONDecodeError:
+            analysis_raw = analysis_raw.replace("'", '"').strip()
+            if not analysis_raw or analysis_raw[0] not in ['{', '[']:
+                logger.warning(f"GPT returned invalid or empty JSON response for division {division_id}")
+                return {"warnings": {"quote": "", "takeoff": ""}}
+            analysis = json.loads(analysis_raw)
+
+        if not isinstance(analysis, dict) or "quote" not in analysis or "takeoff" not in analysis:
+            raise ValueError("Response must be a dictionary with 'quote' and 'takeoff' fields")
+        logger.info(f"Analysis completed for division {division_id}: {analysis}")
+        return {"warnings": analysis}
     except Exception as e:
         logger.error(f"Error analyzing division {division_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error analyzing division {division_id}: {str(e)}")
