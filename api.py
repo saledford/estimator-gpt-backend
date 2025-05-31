@@ -234,6 +234,134 @@ class DivisionAnalysisRequest(BaseModel):
     quotes: List[Dict]
     takeoff: List[Dict]
     specs: str
+@app.post("/api/generate-summary")
+async def generate_summary(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    full_text = ""
+    for file in files:
+        try:
+            content = await file.read()
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
+
+    prompt = (
+        "You are an architect tasked with summarizing a construction project based on the provided specifications. "
+        "Generate a concise, professional summary in a narrative style. "
+        "The summary should be 2–3 sentences long.\n\n"
+        f"Project Specifications:\n{full_text}\n\nSummary:"
+    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a professional architect summarizing construction project specs."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7
+        )
+        summary = response.choices[0].message.content.strip()
+        return {"summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
+@app.post("/api/parse-specs")
+async def parse_specs(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    full_text = ""
+    for file in files:
+        try:
+            content = await file.read()
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
+
+    prompt = (
+        "You are a construction analyst tasked with extracting detailed specifications by CSI Division. "
+        "Return a JSON dictionary where keys are CSI division numbers (e.g., '03', '09') and values are detailed descriptions. "
+        "Exclude divisions not mentioned.\n\n"
+        f"Project Text:\n{full_text}\n\nSpecifications (as JSON):"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a construction analyst parsing project specifications."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=700,
+            temperature=0.5
+        )
+        raw = response.choices[0].message.content.strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = json.loads(raw.replace("'", '"'))
+
+        if not isinstance(parsed, dict):
+            raise ValueError("Specs must be a dictionary")
+        return {"descriptions": json.dumps(parsed)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error parsing specs: {str(e)}")
+@app.post("/api/parse-structured")
+async def parse_structured(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    full_text = ""
+    suggested_name = ""
+
+    for file in files:
+        try:
+            content = await file.read()
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                full_text += page.get_text().lower()
+            if doc.page_count > 0 and not suggested_name:
+                lines = doc.load_page(0).get_text().splitlines()
+                candidates = [line.strip() for line in lines if len(line.strip()) > 20]
+                for line in candidates:
+                    if any(k in line.lower() for k in ["renovation", "school", "project", "improvement"]):
+                        suggested_name = line
+                        break
+            doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
+
+    quotes = []
+    for div, name in CSI_DIVISIONS:
+        match = "Not detected"
+        for keyword in DIVISION_KEYWORDS.get(div, []):
+            if keyword in full_text:
+                match = f"{name} scope detected"
+                break
+        quotes.append({
+            "id": div,
+            "title": name,
+            "summary": match,
+            "cost": 0,
+            "markup": 10,
+            "finalPrice": 0
+        })
+
+    if not suggested_name:
+        suggested_name = file.filename.replace(".pdf", "")
+
+    return {
+        "quotes": quotes,
+        "suggestedProjectName": suggested_name
+    }
 
 @app.post("/api/analyze-division/{division_id}")
 async def analyze_division(division_id: str, request: DivisionAnalysisRequest):
