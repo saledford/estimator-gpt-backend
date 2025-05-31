@@ -3,4 +3,3 @@ __pycache__/
 *.pyc
 temp_uploads/ 
 quote_parsing.log
-quote_parsing.log
