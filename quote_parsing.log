@@ -879,3 +879,213 @@ This dictionary covers the divisions mentioned in the text, focusing on material
 }
 ```
 2025-05-31 18:03:42,100 - ERROR - Error analyzing division 33: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:19:26,469 - INFO - Uploaded file: 2af1eb63-07e6-4ce1-8bd5-3446b82c5bdc_100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf, File ID: 2af1eb63-07e6-4ce1-8bd5-3446b82c5bdc
+2025-05-31 18:19:36,851 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:19:36,851 - INFO - Retrying request to /chat/completions in 0.496623 seconds
+2025-05-31 18:19:37,801 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:19:37,801 - INFO - Retrying request to /chat/completions in 0.895316 seconds
+2025-05-31 18:19:38,910 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:19:46,618 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:19:46,618 - INFO - Retrying request to /chat/completions in 0.490749 seconds
+2025-05-31 18:19:47,279 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:19:47,287 - INFO - Retrying request to /chat/completions in 0.802061 seconds
+2025-05-31 18:19:48,382 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-05-31 18:20:02,056 - INFO - Text extracted for takeoff parsing from file: 100 SEAL_FULL SET Princeton Graded School 25.03.21_sealed (2).pdf
+2025-05-31 18:20:02,063 - WARNING - Token estimate before truncation: 39000
+2025-05-31 18:20:02,064 - WARNING - Token estimate after truncation: 2421
+2025-05-31 18:20:02,874 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:02,877 - ERROR - Failed to parse takeoff response as JSON: ```json
+[]
+```
+2025-05-31 18:20:04,096 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:04,096 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is $0, which is unrealistic for any division.",
+  "takeoff": "No takeoff items listed; typically there should be some general requirement items like permits, insurance, or project management costs."
+}
+```
+2025-05-31 18:20:04,096 - ERROR - Error analyzing division 01: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:05,289 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:05,289 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero.",
+  "takeoff": "No takeoff items provided; potential missing items."
+}
+```
+2025-05-31 18:20:05,289 - ERROR - Error analyzing division 02: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:06,333 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:06,344 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which is not feasible for any concrete work.",
+  "takeoff": "No takeoff items provided; this might indicate missing scope or incomplete data."
+}
+```
+2025-05-31 18:20:06,344 - ERROR - Error analyzing division 03: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:07,464 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:07,464 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which is unexpected for a Masonry division.",
+  "takeoff": "No takeoff items provided, which is unusual for a Masonry division."
+}
+```
+2025-05-31 18:20:07,464 - ERROR - Error analyzing division 04: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:08,650 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:08,654 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero, which may indicate missing data or an error.",
+  "takeoff": "No takeoff items provided, which may indicate missing data or an error."
+}
+```
+2025-05-31 18:20:08,654 - ERROR - Error analyzing division 05: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:09,677 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:09,679 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero, which is unexpected for this division.",
+  "takeoff": "No takeoff items provided; this may indicate missing or incomplete data."
+}
+```
+2025-05-31 18:20:09,679 - ERROR - Error analyzing division 06: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:11,764 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:11,764 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero, which is unexpected for a division dealing with thermal and moisture protection.",
+  "takeoff": "No takeoff items listed; potential omission of necessary materials or quantities."
+}
+```
+2025-05-31 18:20:11,764 - ERROR - Error analyzing division 07: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:13,042 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:13,046 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which may indicate missing or incorrect data.",
+  "takeoff": "No takeoff items listed; potential missing data for doors, windows, or other openings."
+}
+```
+2025-05-31 18:20:13,046 - ERROR - Error analyzing division 08: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:14,020 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:14,036 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero.",
+  "takeoff": "No takeoff items listed; potential missing items for division."
+}
+```
+2025-05-31 18:20:14,036 - ERROR - Error analyzing division 09: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:14,770 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:14,770 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low",
+  "takeoff": "No takeoff items provided"
+}
+```
+2025-05-31 18:20:14,770 - ERROR - Error analyzing division 10: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:16,141 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:16,141 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low, as it is zero. This might indicate missing or unaccounted items.",
+  "takeoff": "No takeoff items provided, which is unusual for this division. This could indicate missing information or an oversight."
+}
+```
+2025-05-31 18:20:16,141 - ERROR - Error analyzing division 11: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:17,628 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:17,628 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price should not be zero if there are any furnishings involved.",
+  "takeoff": "No takeoff items provided; verify if furnishings are required or if items are missing."
+}
+```
+2025-05-31 18:20:17,628 - ERROR - Error analyzing division 12: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:18,620 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:18,620 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Quote is missing cost details.",
+  "takeoff": "No takeoff items provided; Potential missing scope."
+}
+```
+2025-05-31 18:20:18,620 - ERROR - Error analyzing division 13: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:19,851 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:19,851 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; final price is zero, which is unexpected for conveying equipment like elevators.",
+  "takeoff": "No takeoff items listed; conveying equipment such as elevators typically requires detailed takeoff items."
+}
+```
+2025-05-31 18:20:19,851 - ERROR - Error analyzing division 14: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:21,040 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:21,041 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which may indicate missing or inaccurate cost data.",
+  "takeoff": "No takeoff items provided; potential missing information for accurate cost estimation and project execution."
+}
+```
+2025-05-31 18:20:21,041 - ERROR - Error analyzing division 21: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:22,408 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:22,410 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which may indicate missing or incorrect data.",
+  "takeoff": "No takeoff items listed, which may indicate missing data."
+}
+```
+2025-05-31 18:20:22,410 - ERROR - Error analyzing division 22: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:23,889 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:23,889 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; no cost provided for HVAC division.",
+  "takeoff": "No takeoff items listed; potential missing items or incomplete data."
+}
+```
+2025-05-31 18:20:23,889 - ERROR - Error analyzing division 23: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:24,620 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:24,620 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low",
+  "takeoff": "No takeoff items provided"
+}
+```
+2025-05-31 18:20:24,620 - ERROR - Error analyzing division 25: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:26,195 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:26,195 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, which is not feasible for an electrical division.",
+  "takeoff": "Missing takeoff items; No takeoff items listed for the electrical division."
+}
+```
+2025-05-31 18:20:26,195 - ERROR - Error analyzing division 26: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:27,200 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:27,200 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low. Final price is zero, indicating potential missing or unaccounted costs.",
+  "takeoff": "No takeoff items provided. Ensure all necessary items are included for accurate cost estimation."
+}
+```
+2025-05-31 18:20:27,200 - ERROR - Error analyzing division 27: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:28,490 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:28,490 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; Final price is zero, indicating potential missing or incorrect pricing data.",
+  "takeoff": "No takeoff items listed; potential missing or incomplete takeoff data."
+}
+```
+2025-05-31 18:20:28,490 - ERROR - Error analyzing division 28: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:29,781 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:29,781 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+    "quote": "Cost seems unusually low; no cost provided for Earthwork division.",
+    "takeoff": "No takeoff items provided; ensure all earthwork components are accounted for."
+}
+```
+2025-05-31 18:20:29,781 - ERROR - Error analyzing division 31: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:30,981 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:30,981 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low; check for missing or incomplete cost data.",
+  "takeoff": "No takeoff items provided; verify if the scope of work is missing or incomplete."
+}
+```
+2025-05-31 18:20:30,981 - ERROR - Error analyzing division 32: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
+2025-05-31 18:20:31,934 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-31 18:20:31,934 - ERROR - Failed to parse analysis response as JSON: ```json
+{
+  "quote": "Cost seems unusually low",
+  "takeoff": "No takeoff items provided"
+}
+```
+2025-05-31 18:20:31,934 - ERROR - Error analyzing division 33: 500: Failed to parse analysis response: Expecting value: line 1 column 1 (char 0)
