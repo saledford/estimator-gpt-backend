@@ -306,56 +306,64 @@ async def parse_specs(files: List[UploadFile] = File(...)):
         logger.error("No files provided for specs parsing")
         raise HTTPException(status_code=400, detail="No files provided")
 
-    full_text = ""
+    combined_specs = {}
     for file in files:
         try:
             content = await file.read()
             doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text()
+            
+            text_chunks = []
+            chunk = ""
+            for i, page in enumerate(doc):
+                chunk += page.get_text()
+                if (i + 1) % 5 == 0:
+                    text_chunks.append(chunk)
+                    chunk = ""
+            if chunk:
+                text_chunks.append(chunk)
+            
             doc.close()
-            logger.info(f"Text extracted for specs parsing from file: {file.filename}")
+            logger.info(f"Text extracted for specs parsing from file: {file.filename}, split into {len(text_chunks)} chunks")
+            
+            for chunk in text_chunks:
+                logger.info(f"Sending chunk to GPT with length: {len(chunk)} chars")
+                prompt = (
+                    "You are a construction analyst extracting specifications by CSI Division. "
+                    "Return a JSON dictionary where keys are division numbers (e.g., '03', '09') and values are detailed descriptions. "
+                    "Exclude divisions not mentioned. Respond only with valid JSON.\n\n"
+                    f"Project Text:\n{chunk}\n\nSpecifications (as JSON):"
+                )
+
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are a construction analyst."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_tokens=700,
+                        temperature=0.4
+                    )
+                    raw = response.choices[0].message.content.strip()
+                    parsed = json.loads(raw.replace("'", '"'))
+
+                    if isinstance(parsed, dict):
+                        for div, desc in parsed.items():
+                            if div in combined_specs:
+                                combined_specs[div] += " " + desc
+                            else:
+                                combined_specs[div] = desc
+
+                except Exception as e:
+                    logger.error(f"Error parsing GPT response for chunk: {str(e)}")
+                    continue
+
         except Exception as e:
             logger.error(f"Error extracting text for specs from {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
 
-    prompt = (
-        "You are a construction analyst tasked with extracting detailed specifications by CSI Division. "
-        "Return a JSON dictionary where keys are CSI division numbers (e.g., '03', '09') and values are detailed descriptions. "
-        "Only include divisions actually mentioned. "
-        "Respond only with valid JSON. Do not explain anything.\n\n"
-        f"Project Text:\n{full_text}\n\n"
-        "Specifications (as JSON):"
-    )
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a construction analyst parsing project specifications."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=700,
-            temperature=0.5
-        )
-        raw = response.choices[0].message.content.strip()
-        logger.warning(f"Raw GPT response for specs:\n{raw}")
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            raw = raw.replace("'", '"').strip()
-            if not raw or raw[0] not in ['{', '[']:
-                logger.warning("GPT returned invalid or empty JSON response for specs")
-                return {"descriptions": "{}"}
-            parsed = json.loads(raw)
-
-        if not isinstance(parsed, dict):
-            raise ValueError("Specs must be a dictionary")
-        logger.info(f"Parsed specifications for {len(parsed)} divisions")
-        return {"descriptions": json.dumps(parsed)}
-    except Exception as e:
-        logger.error(f"Error parsing specs: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error parsing specs: {str(e)}")
+    logger.info(f"Parsed specifications for {len(combined_specs)} divisions")
+    return {"descriptions": json.dumps(combined_specs)}
 
 @app.post("/api/parse-structured")
 async def parse_structured(files: List[UploadFile] = File(...)):
