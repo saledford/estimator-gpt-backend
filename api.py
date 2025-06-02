@@ -236,286 +236,98 @@ async def extract_takeoff(division_id: str, files: List[UploadFile] = File(...))
         logger.error(f"Error generating takeoff for division {division_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating takeoff: {str(e)}")
 
-@app.post("/api/parse-takeoff")
-async def parse_takeoff(files: List[UploadFile] = File(...)):
+@app.post("/api/full-scan")
+async def full_scan(files: List[UploadFile] = File(...)):
     if not files:
-        logger.error("No files provided for takeoff parsing")
+        logger.error("No files provided for full scan")
         raise HTTPException(status_code=400, detail="No files provided")
 
-    full_text = ""
-    for file in files:
-        try:
-            content = await file.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text()
-            doc.close()
-            logger.info(f"Text extracted for takeoff parsing from file: {file.filename}")
-        except Exception as e:
-            logger.error(f"Error extracting text for takeoff from {file.filename}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
-
-    full_text_truncated = full_text[:12000]
-    estimated_tokens = len(full_text_truncated.split()) * 1.33
-    logger.info(f"Token estimate for takeoff parsing: {estimated_tokens:.0f}")
-
     try:
-        prompt = """
-Extract a list of construction takeoff items from these documents. Respond in strict JSON with the following structure:
+        # Combine contents of all uploaded files
+        text_parts = []
+        for file in files:
+            content = await file.read()
+            if file.filename.lower().endswith(".pdf"):
+                doc = fitz.open(stream=content, filetype="pdf")
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+            elif file.filename.lower().endswith(".xlsx"):
+                text_parts.append(f"(Excel file uploaded: {file.filename})")
+            elif file.filename.lower().endswith(".docx"):
+                text_parts.append(f"(Word doc uploaded: {file.filename})")
+            else:
+                text_parts.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Processed file: {file.filename}")
 
-[
-  {
-    "division": "03",
-    "description": "Pour 6-inch slab on grade",
-    "quantity": 1200,
-    "unit": "SF",
-    "unitCost": 5.75,
-    "modifier": 0
-  }
-]
-Do not include comments. Only valid JSON.
+        combined_text = "\n\n".join(text_parts)
+        if len(combined_text) > 30000:
+            combined_text = combined_text[:30000]
+            logger.warning("Truncated combined text to 30,000 characters")
 
-Project Text:
-{full_text_truncated}
+        # Send to GPT-4o
+        prompt = f"""
+You are a professional construction estimator AI.
+
+From the following documents, generate the following structured JSON:
+1. "title": Short project name (e.g. "City of Wilson Fire Station Renovation")
+2. "summary": Overview of the project scope and purpose
+3. "divisionDescriptions": CSI division scope descriptions, mapped to keys like "03", "09"
+4. "takeoff": List of items with fields:
+   - division
+   - description
+   - quantity
+   - unit
+   - unitCost
+   - modifier (optional)
+
+ONLY return valid JSON:
+{{
+  "title": "...",
+  "summary": "...",
+  "divisionDescriptions": {{ "03": "...", "09": "..." }},
+  "takeoff": [
+    {{
+      "division": "03",
+      "description": "...",
+      "quantity": 100,
+      "unit": "SF",
+      "unitCost": 12.5,
+      "modifier": 0
+    }}
+  ]
+}}
+
+Documents:
+{combined_text}
 """
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a construction estimator extracting takeoff data."},
+                {"role": "system", "content": "You are an expert construction estimator."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1000,
-            temperature=0.5
+            temperature=0.4,
+            max_tokens=3000
         )
-        takeoff_raw = response.choices[0].message.content.strip()
 
-        if not takeoff_raw:
-            logger.warning("Takeoff response was empty")
-            return JSONResponse(content={"takeoff": []})
-
+        reply = response.choices[0].message.content.strip()
         try:
-            parsed_items = json.loads(takeoff_raw.replace("'", '"'))
-            if not isinstance(parsed_items, list):
-                raise ValueError("Response is not a list")
-            logger.info(f"Parsed {len(parsed_items)} takeoff items")
-            return JSONResponse(content={"takeoff": parsed_items})
+            result = json.loads(reply.replace("'", '"'))
+            if not isinstance(result, dict) or not all(key in result for key in ["title", "summary", "divisionDescriptions", "takeoff"]):
+                raise ValueError("Invalid response structure")
+            logger.info(f"Full scan completed: title={result['title']}, {len(result['takeoff'])} takeoff items")
+            return JSONResponse(content=result)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse takeoff response as JSON: {takeoff_raw}")
+            logger.error(f"Failed to parse GPT response: {reply}")
             return JSONResponse(status_code=500, content={"detail": "Failed to parse GPT response"})
+        except ValueError as e:
+            logger.error(f"Invalid GPT response structure: {str(e)}")
+            return JSONResponse(status_code=500, content={"detail": "Invalid GPT response structure"})
+
     except Exception as e:
-        logger.error(f"Error parsing takeoff: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Error parsing takeoff: {str(e)}"})
-
-@app.post("/api/parse-specs")
-async def parse_specs(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for specs parsing")
-        raise HTTPException(status_code=400, detail="No files provided")
-
-    full_text = ""
-    for file in files:
-        try:
-            content = await file.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text()
-            doc.close()
-            logger.info(f"Text extracted for specs parsing from file: {file.filename}")
-        except Exception as e:
-            logger.error(f"Error extracting text for specs from {file.filename}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
-
-    try:
-        prompt = """
-You are reviewing detailed construction documents for a project. For each CSI Division (01–33) that appears in the documents, write a **very specific, job-relevant scope description** for that division.
-
-Focus on exactly what is being priced — materials, labor scope, demolition, installation, protection, etc. This is for a professional estimator. Avoid generic statements.
-
-Return the result as a **strict JSON object**, where each key is a CSI division number ("03", "09", etc.) and the value is a scope summary.
-
-Example:
-{
-  "03": "This scope includes demolition of existing slab areas, installation of 6\" reinforced concrete slab on vapor barrier at truck bay, patching areas with doweled connection to existing slab, and rebar installed per structural details.",
-  "09": "Scope includes installation of moisture mitigation system, carpet tiles, LVT flooring, baseboard, gypsum ceilings, and full interior paint of walls, ceilings, and exposed structure."
-}
-Only return valid JSON. No markdown. No headings.
-
-Project Text:
-{full_text[:12000]}
-"""
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a construction analyst extracting scope descriptions."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=700,
-            temperature=0.4
-        )
-        raw = response.choices[0].message.content.strip()
-        try:
-            parsed_json = json.loads(raw.replace("'", '"'))
-            if not isinstance(parsed_json, dict):
-                raise ValueError("Response must be a dictionary")
-            logger.info(f"Parsed specifications for {len(parsed_json)} divisions")
-            return JSONResponse(content={"descriptions": json.dumps(parsed_json)})
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse specs response: {raw}")
-            return JSONResponse(status_code=500, content={"detail": "Failed to parse GPT response"})
-    except Exception as e:
-        logger.error(f"Error generating specs: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Error generating specs: {str(e)}"})
-
-@app.post("/api/parse-structured")
-async def parse_structured(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for structured parsing")
-        raise HTTPException(status_code=400, detail="No files provided")
-
-    full_text = ""
-    suggested_name = ""
-
-    for file in files:
-        try:
-            content = await file.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text().lower()
-            if doc.page_count > 0 and not suggested_name:
-                first_page = doc.load_page(0)
-                raw_text = first_page.get_text().strip()
-                lines = raw_text.splitlines()
-                candidates = [
-                    line.strip() for line in lines
-                    if len(line.strip()) > 20 and not any(k in line.lower() for k in ["jkf", "drawing", "project number"])
-                ]
-                priority_keywords = ["renovation", "school", "project", "improvement", "addition", "public works"]
-                for line in candidates:
-                    if any(k in line.lower() for k in priority_keywords):
-                        suggested_name = line
-                        break
-                if not suggested_name and candidates:
-                    suggested_name = candidates[0]
-                if not suggested_name:
-                    suggested_name = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ").strip()
-            doc.close()
-            logger.info(f"Text extracted for structured parsing from file: {file.filename}")
-        except Exception as e:
-            logger.error(f"Error extracting text for structured parsing from {file.filename}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
-
-    try:
-        prompt = (
-            "You are a construction estimator tasked with detecting scope categories by CSI Division. "
-            "Analyze the provided project text and identify relevant CSI divisions. "
-            "Return a JSON list of quotes, each with: id (CSI division number), title (division name), summary (scope description or 'Not detected'), cost (default 0), markup (default 10), finalPrice (default 0). "
-            "Use the provided keywords to guide detection.\n\n"
-            f"Project Text:\n{full_text[:12000]}\n\n"
-            f"CSI Keywords:\n{json.dumps(DIVISION_KEYWORDS)}\n\n"
-            "Quotes (as a JSON list):"
-        )
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a construction estimator detecting scope categories."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=1000,
-            temperature=0.5
-        )
-        quotes_raw = response.choices[0].message.content.strip()
-        try:
-            quotes = json.loads(quotes_raw.replace("'", '"'))
-            if not isinstance(quotes, list):
-                raise ValueError("Response is not a list")
-            logger.info(f"Detected {len(quotes)} scope categories")
-        except Exception as e:
-            logger.warning(f"Failed to parse GPT quotes, falling back to keyword-based detection: {str(e)}")
-            quotes = []
-            for div, name in CSI_DIVISIONS.items():
-                match = "Not detected"
-                for keyword in DIVISION_KEYWORDS.get(div, []):
-                    if keyword in full_text:
-                        match = f"{name} scope detected"
-                        break
-                quotes.append({
-                    "id": div,
-                    "title": name,
-                    "summary": match,
-                    "cost": 0,
-                    "markup": 10,
-                    "finalPrice": 0
-                })
-        return {
-            "quotes": quotes,
-            "suggestedProjectName": suggested_name
-        }
-    except Exception as e:
-        logger.error(f"Error generating structured quotes: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating structured quotes: {str(e)}")
-
-@app.post("/api/generate-summary")
-async def generate_summary(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for summary generation")
-        raise HTTPException(status_code=400, detail="No files provided")
-
-    full_text = ""
-    for file in files:
-        try:
-            content = await file.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                full_text += page.get_text()
-            doc.close()
-            logger.info(f"Text extracted for summary from file: {file.filename}")
-        except Exception as e:
-            logger.error(f"Error extracting text for summary from {file.filename}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
-
-    try:
-        prompt = """
-Analyze these construction documents. Return two fields in JSON:
-
-- "summary": A professional paragraph (3–4 sentences) explaining what this project is, its location, and purpose.
-- "title": A short name for the project (4–8 words), usable as a folder name. Avoid symbols or slashes.
-
-Example:
-{
-  "summary": "This project is a full renovation of the Public Works Facility in Greenville, NC...",
-  "title": "Greenville Public Works Renovation"
-}
-
-Project Specifications:
-{full_text[:12000]}
-"""
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a professional construction analyst summarizing project specs."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=200,
-            temperature=0.7
-        )
-        raw_response = response.choices[0].message.content.strip()
-        try:
-            parsed = json.loads(raw_response.replace("'", '"'))
-            if not isinstance(parsed, dict) or "summary" not in parsed or "title" not in parsed:
-                raise ValueError("Response must be a dictionary with 'summary' and 'title' fields")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse GPT response: {raw_response}")
-            return JSONResponse(status_code=500, content={"detail": "Failed to parse GPT response"})
-
-        safe_title = re.sub(r'[^a-zA-Z0-9 _-]', '', parsed["title"])
-        logger.info(f"Generated project summary: {parsed['summary']}, title: {safe_title}")
-        return JSONResponse(content={
-            "summary": parsed["summary"],
-            "title": safe_title
-        })
-    except Exception as e:
-        logger.error(f"Error generating summary: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Error generating summary: {str(e)}"})
+        logger.error(f"Failed to scan project: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": f"Failed to scan project: {str(e)}"})
 
 class DivisionAnalysisRequest(BaseModel):
     quotes: List[Dict]
