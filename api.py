@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from typing import List, Dict
 import fitz  # PyMuPDF
 import re
@@ -59,9 +59,8 @@ CSI_DIVISIONS = {
     "33": "Utilities"
 }
 
-UPLOAD_FOLDER = "temp_uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-files_storage: Dict[str, str] = {}  # {file_id: file_path}
+UPLOAD_DIR = "./temp_uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/")
 async def root():
@@ -70,60 +69,35 @@ async def root():
 
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith((".pdf", ".xlsx")):
-        logger.error(f"Invalid file type for {file.filename}: Only PDF and Excel files are allowed")
-        raise HTTPException(status_code=400, detail="Only PDF and Excel files are allowed")
-
-    file_id = str(uuid.uuid4())
-    filename = f"{file_id}_{file.filename}"
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-
     try:
-        with open(filepath, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        files_storage[file_id] = filepath
-        logger.info(f"Uploaded file: {filename}, File ID: {file_id}")
-        return {"fileId": file_id}
+        file_id = str(uuid.uuid4())
+        path = os.path.join(UPLOAD_DIR, file_id)
+        with open(path, "wb") as f:
+            f.write(await file.read())
+        logger.info(f"Uploaded file: {file.filename}, File ID: {file_id}")
+        return {"fileId": file_id, "name": file.filename}
     except Exception as e:
-        logger.error(f"Failed to save file {file.filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        logger.error(f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.get("/api/get-file/{file_id}")
 async def get_file(file_id: str):
-    if file_id not in files_storage:
+    path = os.path.join(UPLOAD_DIR, file_id)
+    if not os.path.exists(path):
         logger.error(f"File not found: {file_id}")
         raise HTTPException(status_code=404, detail="File not found")
-    filepath = files_storage[file_id]
-    if not os.path.exists(filepath):
-        logger.error(f"File path does not exist: {filepath}")
-        raise HTTPException(status_code=404, detail="File not found")
-    try:
-        filename = os.path.basename(filepath)
-        media_type = "application/pdf" if filename.endswith(".pdf") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        logger.info(f"Retrieved file: {filename}, File ID: {file_id}")
-        return FileResponse(filepath, media_type=media_type, filename=filename)
-    except Exception as e:
-        logger.error(f"Error retrieving file {file_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    logger.info(f"Retrieved file: {file_id}")
+    return FileResponse(path, filename=file_id)
 
 @app.delete("/api/delete-file/{file_id}")
 async def delete_file(file_id: str):
-    if file_id not in files_storage:
-        logger.error(f"File not found for deletion: {file_id}")
-        raise HTTPException(status_code=404, detail="File not found")
-    filepath = files_storage[file_id]
-    if not os.path.exists(filepath):
-        logger.error(f"File path does not exist for deletion: {filepath}")
-        raise HTTPException(status_code=404, detail="File not found")
-    try:
-        os.remove(filepath)
-        del files_storage[file_id]
-        logger.info(f"Deleted file: {filepath}")
-        return {"message": "File deleted successfully"}
-    except Exception as e:
-        logger.error(f"Error deleting file {file_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    path = os.path.join(UPLOAD_DIR, file_id)
+    if os.path.exists(path):
+        os.remove(path)
+        logger.info(f"Deleted file: {file_id}")
+        return {"message": f"{file_id} deleted"}
+    logger.error(f"File not found for deletion: {file_id}")
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.post("/api/full-scan")
 async def full_scan(files: List[UploadFile] = File(...)):
