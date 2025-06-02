@@ -187,8 +187,8 @@ async def extract_takeoff(division_id: str, files: List[UploadFile] = File(...))
         raise HTTPException(status_code=400, detail="No files provided")
 
     if division_id not in CSI_DIVISIONS:
-        logger.error(f"Invalid division ID: {division_id}")
-        raise HTTPException(status_code=400, detail="Invalid division ID")
+        logger.error(f"Division ID not found: {division_id}")
+        raise HTTPException(status_code=404, detail="Invalid division ID")
 
     full_text = ""
     for file in files:
@@ -208,7 +208,7 @@ async def extract_takeoff(division_id: str, files: List[UploadFile] = File(...))
             f"You are a construction estimator analyzing takeoff data for Division {division_id} – {CSI_DIVISIONS[division_id]}.\n"
             f"Extract only takeoff items related to this division from the provided project text.\n"
             "Return a JSON list where each item has: division, description, quantity, unit, unitCost, and modifier.\n"
-            f"Project Text:\n{full_text[:12000]}\n\nTakeoff Items (JSON list):"
+            f"Project Text:\n{full_text[:12000]}\n\nTakeoff Items:"
         )
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -223,13 +223,13 @@ async def extract_takeoff(division_id: str, files: List[UploadFile] = File(...))
         try:
             takeoff = json.loads(parsed.replace("'", '"'))
             if not isinstance(takeoff, list):
-                raise ValueError("GPT response is not a list")
+                raise ValueError("Response is not a list")
             for item in takeoff:
                 item["division"] = division_id
             logger.info(f"Extracted {len(takeoff)} takeoff items for division {division_id}")
         except Exception as e:
             logger.error(f"Error parsing takeoff response for division {division_id}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error parsing takeoff response: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error parsing failed: {str(e)}")
 
         return {"takeoff": takeoff}
     except Exception as e:
@@ -472,25 +472,48 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             logger.error(f"Error extracting text for summary from {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
 
-    prompt = (
-        "You are an architect tasked with summarizing a construction project based on the provided specifications. "
-        "Generate a concise, professional summary in a narrative style. "
-        "The summary should be 2–3 sentences long.\n\n"
-        f"Project Specifications:\n{full_text[:12000]}\n\nSummary:"
-    )
+    prompt = f"""
+You are an AI construction analyst. Read the uploaded construction documents and generate two things:
+
+1. A concise but professional project summary in paragraph form (2–4 sentences).
+2. A short, clean project title (5–10 words max), suitable for naming a folder. Avoid special characters.
+
+Respond in JSON with keys: "summary" and "title".
+
+Example output:
+{{
+  "summary": "The project involves a full renovation of the City of Greenville’s Public Works Building...",
+  "title": "Greenville Public Works Renovation"
+}}
+
+Project Specifications:
+{full_text[:12000]}
+"""
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a professional architect summarizing construction project specs."},
+                {"role": "system", "content": "You are a professional construction analyst summarizing project specs."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=150,
+            max_tokens=200,
             temperature=0.7
         )
-        summary = response.choices[0].message.content.strip()
-        logger.info(f"Generated project summary: {summary}")
-        return {"summary": summary}
+        raw_response = response.choices[0].message.content.strip()
+        try:
+            parsed_response = json.loads(raw_response.replace("'", '"'))
+            if not isinstance(parsed_response, dict) or "summary" not in parsed_response or "title" not in parsed_response:
+                raise ValueError("Response must be a dictionary with 'summary' and 'title' fields")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse GPT response: {raw_response}")
+            raise HTTPException(status_code=500, detail=f"Error parsing GPT response: {str(e)}")
+
+        safe_title = re.sub(r'[^a-zA-Z0-9 _\-]', '', parsed_response["title"])
+        logger.info(f"Generated project summary: {parsed_response['summary']}, title: {safe_title}")
+        return JSONResponse(content={
+            "summary": parsed_response["summary"],
+            "title": safe_title
+        })
     except Exception as e:
         logger.error(f"Error generating summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
