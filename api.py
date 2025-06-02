@@ -327,13 +327,18 @@ async def parse_specs(files: List[UploadFile] = File(...)):
 
     try:
         prompt = """
-Read the construction documents provided. Return a JSON object where each key is a CSI division number (e.g., "03", "04", "09") and the value is a one-paragraph scope description for that division. Use plain JSON — no markdown, no explanation.
+You are reviewing detailed construction documents for a project. For each CSI Division (01–33) that appears in the documents, write a **very specific, job-relevant scope description** for that division.
 
-Example format:
+Focus on exactly what is being priced — materials, labor scope, demolition, installation, protection, etc. This is for a professional estimator. Avoid generic statements.
+
+Return the result as a **strict JSON object**, where each key is a CSI division number ("03", "09", etc.) and the value is a scope summary.
+
+Example:
 {
-  "03": "Concrete work includes footing excavation, forming, pouring, and slab finishing...",
-  "09": "Finishes scope includes drywall, painting, and floor covering..."
+  "03": "This scope includes demolition of existing slab areas, installation of 6\" reinforced concrete slab on vapor barrier at truck bay, patching areas with doweled connection to existing slab, and rebar installed per structural details.",
+  "09": "Scope includes installation of moisture mitigation system, carpet tiles, LVT flooring, baseboard, gypsum ceilings, and full interior paint of walls, ceilings, and exposed structure."
 }
+Only return valid JSON. No markdown. No headings.
 
 Project Text:
 {full_text[:12000]}
