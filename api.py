@@ -1,10 +1,8 @@
-
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from typing import List, Dict
+from typing import List
 import fitz  # PyMuPDF
-import re
 import os
 import uuid
 import logging
@@ -24,7 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     filename="quote_parsing.log",
     level=logging.INFO,
@@ -32,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Constants
 CSI_DIVISIONS = {
     "01": "General Requirements",
     "02": "Existing Conditions",
@@ -107,7 +103,6 @@ async def full_scan(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        # Combine file content
         text_parts = []
         for file in files:
             content = await file.read()
@@ -129,19 +124,16 @@ async def full_scan(files: List[UploadFile] = File(...)):
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters")
 
-        # Extract title and summary
+        # Title and Summary
         prompt_title_summary = f"""
 You are a professional construction estimator AI.
 
 From the following construction documents, extract the following:
-1. "title": A short, clean project name (no file names or markup)
-2. "summary": A high-level narrative description of the overall project. It should give the estimator a full understanding of the building type, renovations/improvements, and what work is likely to be involved. Minimum 4–6 sentences.
+1. "title": A short, clean project name
+2. "summary": A 4–6 sentence narrative describing the full project scope
 
 Return JSON:
-{{
-  "title": "...",
-  "summary": "..."
-}}
+{{ "title": "...", "summary": "..." }}
 
 DOCUMENTS:
 {document_text}
@@ -156,33 +148,21 @@ DOCUMENTS:
                 temperature=0.4,
                 max_tokens=3500
             )
-            raw_title_summary = response.choices[0].message.content.strip()
-            logger.info(f"Raw GPT title/summary response: {raw_title_summary}")
-            title_summary = json.loads(raw_title_summary.replace("'", '"'))
-            if not isinstance(title_summary, dict) or "title" not in title_summary or "summary" not in title_summary:
-                raise ValueError("Invalid title/summary structure")
-            if not title_summary["summary"]:
-                logger.warning("GPT returned empty summary")
-                raise ValueError("Empty summary returned")
+            raw = response.choices[0].message.content.strip()
+            logger.info(f"Raw title/summary: {raw}")
+            title_summary = json.loads(raw.replace("'", '"'))
+            if not title_summary.get("summary"):
+                raise ValueError("Empty summary")
         except Exception as e:
-            logger.error(f"Failed to extract title/summary: {str(e)}")
+            logger.error(f"Title/summary failed: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Failed to generate valid project summary: {str(e)}")
 
-        # Extract division descriptions
-        prompt_division_descriptions = f"""
-From the following construction documents, return a dictionary of CSI division scope descriptions.
-
-For each of Divisions 01 through 33:
-- If work is found for the division, describe it in 2–4 detailed sentences.
-- If not found, mark it as: "Division [XX] not found in documents."
+        # Division Descriptions
+        prompt_divisions = f"""
+From the construction documents, return descriptions for each CSI division 01–33. If missing, say 'Division XX not found in documents.'
 
 Return JSON:
-{{
-  "01": "...",
-  "02": "...",
-  ...
-  "33": "Division 33 not found in documents."
-}}
+{{ "03": "...", ..., "33": "Division 33 not found in documents." }}
 
 DOCUMENTS:
 {document_text}
@@ -192,45 +172,31 @@ DOCUMENTS:
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are an expert construction estimator."},
-                    {"role": "user", "content": prompt_division_descriptions}
+                    {"role": "user", "content": prompt_divisions}
                 ],
                 temperature=0.4,
                 max_tokens=3500
             )
-            raw_divisions = response.choices[0].message.content.strip()
-            logger.info(f"Raw GPT divisions response: {raw_divisions}")
-            division_descriptions = json.loads(raw_divisions.replace("'", '"'))
-            if not isinstance(division_descriptions, dict):
-                raise ValueError("Invalid division descriptions structure")
+            raw = response.choices[0].message.content.strip()
+            logger.info(f"Raw division descriptions: {raw}")
+            division_descriptions = json.loads(raw.replace("'", '"'))
         except Exception as e:
-            logger.error(f"Failed to extract division descriptions: {str(e)}")
-            division_descriptions = {div: f"Division {div} not found in documents." for div in CSI_DIVISIONS}
+            logger.error(f"Division descriptions failed: {str(e)}")
+            division_descriptions = {k: f"Division {k} not found in documents." for k in CSI_DIVISIONS}
 
-        # Extract takeoff items division by division
-        all_takeoff_items = []
-        for division_id, division_title in CSI_DIVISIONS.items():
-            prompt_takeoff = f"""
-Extract a list of itemized takeoff entries **only** for Division {division_id} – {division_title} from the documents below.
+        # Takeoff Items by Division
+        all_takeoff = []
+        for div_id, div_name in CSI_DIVISIONS.items():
+            prompt = f"""
+Extract takeoff items for Division {div_id} – {div_name} from the documents.
 
-Format as JSON array. Each item must include:
+Return JSON array with:
 - division
 - description
-- quantity (numeric)
-- unit (e.g. SF, LF, EA)
-- unitCost (numeric, dollars)
-- modifier (optional, percent)
-
-Example:
-[
-  {{
-    "division": "{division_id}",
-    "description": "Pour 6-inch slab on grade",
-    "quantity": 2040,
-    "unit": "SF",
-    "unitCost": 9.90,
-    "modifier": 0
-  }}
-]
+- quantity
+- unit
+- unitCost
+- modifier (optional)
 
 DOCUMENTS:
 {document_text}
@@ -240,40 +206,36 @@ DOCUMENTS:
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": "You are an expert construction estimator."},
-                        {"role": "user", "content": prompt_takeoff}
+                        {"role": "user", "content": prompt}
                     ],
                     temperature=0.4,
                     max_tokens=3500
                 )
-                raw_takeoff = response.choices[0].message.content.strip()
-                logger.info(f"Raw GPT takeoff response for division {division_id}: {raw_takeoff}")
-                takeoff_items = json.loads(raw_takeoff.replace("'", '"'))
-                if isinstance(takeoff_items, list) and takeoff_items:
-                    all_takeoff_items.extend(takeoff_items)
+                raw = response.choices[0].message.content.strip()
+                logger.info(f"Takeoff for division {div_id}: {raw}")
+                items = json.loads(raw.replace("'", '"'))
+                if isinstance(items, list):
+                    all_takeoff.extend(items)
             except Exception as e:
-                logger.error(f"Failed to extract takeoff for division {division_id}: {str(e)}")
+                logger.warning(f"Takeoff failed for {div_id}: {str(e)}")
                 continue
 
-        # Validate takeoff results
-        if not all_takeoff_items:
-            logger.warning("GPT returned empty takeoff list")
+        if not title_summary.get("summary") or not all_takeoff:
+            logger.warning("GPT returned no usable summary or takeoff")
             return JSONResponse(
                 status_code=400,
                 content={"detail": "GPT scan returned no usable summary or takeoff items."}
             )
 
-        # Build final JSON response
-        result = {
+        return JSONResponse(content={
             "title": title_summary.get("title", "Untitled Project"),
-            "summary": title_summary.get("summary", "Unable to generate project summary."),
+            "summary": title_summary["summary"],
             "divisionDescriptions": division_descriptions,
-            "takeoff": all_takeoff_items
-        }
-        logger.info(f"Full scan completed: title={result['title']}, {len(result['takeoff'])} takeoff items")
-        return JSONResponse(content=result)
+            "takeoff": all_takeoff
+        })
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Full scan failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to scan project: {str(e)}")
+        logger.error(f"Unhandled error in full scan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Full scan failed: {str(e)}")
