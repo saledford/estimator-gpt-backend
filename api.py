@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -256,7 +257,10 @@ DOCUMENTS:
         # Validate takeoff results
         if not all_takeoff_items:
             logger.warning("GPT returned empty takeoff list")
-            raise HTTPException(status_code=400, detail="No valid takeoff items generated")
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "GPT scan returned no usable summary or takeoff items."}
+            )
 
         # Build final JSON response
         result = {
