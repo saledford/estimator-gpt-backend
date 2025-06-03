@@ -2,15 +2,15 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from typing import List
-import fitz  # PyMuPDF
 import os
 import uuid
 import logging
+import fitz  # PyMuPDF
+import json
 from dotenv import load_dotenv
 from openai import OpenAI
-import json
 
-# === INIT ===
+# === Init ===
 load_dotenv()
 client = OpenAI()
 app = FastAPI()
@@ -54,10 +54,10 @@ async def upload_file(file: UploadFile = File(...)):
         path = os.path.join(UPLOAD_DIR, file_id)
         with open(path, "wb") as f:
             f.write(await file.read())
-        logger.info(f"Uploaded file: {file.filename}, File ID: {file_id}")
+        logger.info(f"Uploaded file: {file.filename} as {file_id}")
         return {"fileId": file_id, "name": file.filename}
     except Exception as e:
-        logger.error(f"Upload failed: {str(e)}")
+        logger.error(f"Upload error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Upload failed: {str(e)}"})
 
 @app.get("/api/get-file/{file_id}")
@@ -75,7 +75,6 @@ async def delete_file(file_id: str):
         os.remove(path)
         logger.info(f"Deleted file: {file_id}")
         return {"message": f"{file_id} deleted"}
-    logger.error(f"File not found for deletion: {file_id}")
     return JSONResponse(status_code=404, content={"detail": "File not found"})
 
 @app.post("/api/full-scan")
@@ -84,94 +83,83 @@ async def full_scan(files: List[UploadFile] = File(...)):
         return JSONResponse(status_code=400, content={"detail": "No files provided"})
 
     try:
-        # === Combine Text ===
-        text_parts = []
+        # Step 1: Combine all file text (PDFs, etc.)
+        text_chunks = []
         for file in files:
             content = await file.read()
             if file.filename.lower().endswith(".pdf"):
                 doc = fitz.open(stream=content, filetype="pdf")
                 for page in doc:
-                    text_parts.append(page.get_text())
+                    text_chunks.append(page.get_text())
                 doc.close()
-            elif file.filename.lower().endswith(".xlsx"):
-                text_parts.append(f"(Excel file uploaded: {file.filename})")
-            elif file.filename.lower().endswith(".docx"):
-                text_parts.append(f"(Word doc uploaded: {file.filename})")
             else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file: {file.filename}")
+                text_chunks.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Parsed file: {file.filename}")
+        
+        full_text = "\n\n".join(text_chunks)
+        if len(full_text) > 40000:
+            full_text = full_text[:40000]
+            logger.warning("Text truncated to 40,000 characters")
 
-        document_text = "\n\n".join(text_parts)
-        if len(document_text) > 40000:
-            document_text = document_text[:40000]
-            logger.warning("Truncated document text to 40,000 characters")
+        # Step 2: Title & Summary
+        logger.info("Requesting GPT title/summary...")
+        prompt_summary = f"""
+You are a construction estimating assistant.
 
-        # === Title & Summary ===
-        prompt = f"""
-You are a professional construction estimator AI.
+From the documents below, extract:
+1. "title": a short project name
+2. "summary": a 4–6 sentence summary
 
-From the following construction documents, extract:
-1. "title": A short, clean project name
-2. "summary": A 4–6 sentence overview of the project scope
-
-Return JSON:
-{{ "title": "...", "summary": "..." }}
+Return JSON.
 
 DOCUMENTS:
-{document_text}
+{full_text}
 """
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": "You are an expert construction estimator."},
-                          {"role": "user", "content": prompt}],
-                temperature=0.4,
-                max_tokens=3500
-            )
-            raw = response.choices[0].message.content.strip()
-            logger.info(f"Title/Summary GPT Output: {raw}")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": "You are an expert construction estimator."},
+                      {"role": "user", "content": prompt_summary}],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```json"):
+            content = content.strip("` \n").replace("json", "").strip()
+        title_summary = json.loads(content.replace("'", '"'))
+        title = title_summary.get("title", "Untitled Project")
+        summary = title_summary.get("summary", "")
+        logger.info(f"Extracted title: {title}")
 
-            if not raw or raw.strip() in ["```", "```json", "```json\n```"]:
-                raise ValueError("GPT returned empty or malformed response")
-
-            if raw.startswith("```json"):
-                raw = raw.strip("` \n").replace("json", "").strip()
-
-            title_summary = json.loads(raw.replace("'", '"'))
-            if not title_summary.get("summary"):
-                raise ValueError("Summary missing")
-        except Exception as e:
-            return JSONResponse(status_code=400, content={"detail": f"Failed to generate valid project summary: {str(e)}"})
-
-        # === Division Descriptions ===
+        # Step 3: Division Descriptions
+        logger.info("Requesting GPT division descriptions...")
         prompt_divs = f"""
-From the documents, return JSON of CSI divisions 01–33. If missing, say "Division XX not found in documents."
+From these construction documents, return a JSON object with keys from Division 01 to Division 33.
+
+Each key should contain a short summary of scope under that division. If not found, say "Division XX not found in documents."
 
 DOCUMENTS:
-{document_text}
+{full_text}
 """
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": "You are an expert construction estimator."},
-                          {"role": "user", "content": prompt_divs}],
-                temperature=0.4,
-                max_tokens=3500
-            )
-            raw = response.choices[0].message.content.strip()
-            logger.info(f"Division GPT Output: {raw}")
-            if raw.startswith("```json"):
-                raw = raw.strip("` \n").replace("json", "").strip()
-            division_descriptions = json.loads(raw.replace("'", '"'))
-        except Exception as e:
-            logger.warning(f"Falling back on empty division descriptions: {str(e)}")
-            division_descriptions = {k: f"Division {k} not found in documents." for k in CSI_DIVISIONS}
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": "You are an expert construction estimator."},
+                      {"role": "user", "content": prompt_divs}],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        raw_divs = response.choices[0].message.content.strip()
+        if raw_divs.startswith("```json"):
+            raw_divs = raw_divs.strip("` \n").replace("json", "").strip()
+        division_descriptions = json.loads(raw_divs.replace("'", '"'))
+        logger.info("Division descriptions parsed")
 
-        # === Takeoff by Division ===
+        # Step 4: Takeoff Items Per Division
         all_takeoff = []
         for div_id, div_name in CSI_DIVISIONS.items():
-            takeoff_prompt = f"""
-Extract takeoff items for Division {div_id} – {div_name}. Return as JSON array with:
+            prompt_takeoff = f"""
+Extract takeoff items for Division {div_id} – {div_name}.
+
+Return an array of items with:
 - division
 - description
 - quantity
@@ -180,45 +168,43 @@ Extract takeoff items for Division {div_id} – {div_name}. Return as JSON array
 - modifier (optional)
 
 DOCUMENTS:
-{document_text}
+{full_text}
 """
             try:
+                logger.info(f"Extracting takeoff for Division {div_id}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[{"role": "system", "content": "You are an expert construction estimator."},
-                              {"role": "user", "content": takeoff_prompt}],
+                              {"role": "user", "content": prompt_takeoff}],
                     temperature=0.4,
                     max_tokens=3500
                 )
-                raw = response.choices[0].message.content.strip()
-                logger.info(f"Takeoff for {div_id}: {raw}")
-                if raw.startswith("```json"):
-                    raw = raw.strip("` \n").replace("json", "").strip()
-                items = json.loads(raw.replace("'", '"'))
+                raw_takeoff = response.choices[0].message.content.strip()
+                if raw_takeoff.startswith("```json"):
+                    raw_takeoff = raw_takeoff.strip("` \n").replace("json", "").strip()
+                items = json.loads(raw_takeoff.replace("'", '"'))
                 if isinstance(items, list):
                     all_takeoff.extend(items)
             except Exception as e:
                 logger.warning(f"Skipping takeoff for {div_id}: {str(e)}")
                 continue
 
-        # === Final Validation ===
-        if not title_summary.get("summary") or not all_takeoff:
+        if not summary or not all_takeoff:
+            logger.warning("Missing key results from GPT scan.")
             return JSONResponse(
                 status_code=400,
-                content={
-                    "detail": "GPT scan returned no usable summary or takeoff items.",
-                    "summary": title_summary.get("summary", ""),
-                    "takeoff_count": len(all_takeoff)
-                }
+                content={"detail": "GPT scan returned no usable summary or takeoff items.",
+                         "summary": summary,
+                         "takeoff_count": len(all_takeoff)}
             )
 
         return JSONResponse(content={
-            "title": title_summary["title"],
-            "summary": title_summary["summary"],
+            "title": title,
+            "summary": summary,
             "divisionDescriptions": division_descriptions,
             "takeoff": all_takeoff
         })
 
     except Exception as e:
-        logger.error(f"Unhandled full scan error: {str(e)}")
+        logger.error(f"Unhandled error during scan: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Full scan failed: {str(e)}"})
