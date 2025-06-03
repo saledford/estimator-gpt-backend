@@ -221,24 +221,23 @@ DOCUMENTS:
                     max_tokens=3500
                 )
                 raw = response.choices[0].message.content.strip()
-                logger.info(f"Takeoff GPT Output for {div_id}: {raw}")
-                items = json.loads(raw.replace("'", '"'))
-                if isinstance(items, list):
-                    all_takeoff.extend(items)
-            except Exception as e:
-                logger.warning(f"Division {div_id} takeoff failed: {str(e)}")
-                continue
+                logger.info(f"Takeoff GPT Output for Division {div_id}: {raw}")
 
-        # === Step 5: Validation ===
-        if not title_summary.get("summary") or not all_takeoff:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "GPT scan returned no usable summary or takeoff items.",
-                    "summary": title_summary.get("summary", ""),
-                    "takeoff_count": len(all_takeoff)
-                }
-            )
+                # Handle markdown-block-only response
+                if not raw or raw.strip() in ["```", "```json", "```json\n```"]:
+                    raise ValueError("GPT returned an empty or malformed response.")
+
+                # Remove surrounding markdown if present
+                if raw.startswith("```json"):
+                    raw = raw.strip("` \n").replace("json", "").strip()
+
+                takeoff_items = json.loads(raw.replace("'", '"'))
+                if isinstance(takeoff_items, dict):
+                    takeoff_items = [takeoff_items]
+                all_takeoff.extend(takeoff_items)
+            except Exception as e:
+                logger.warning(f"Takeoff extraction failed for Division {div_id}: {str(e)}")
+                continue
 
         return JSONResponse(content={
             "title": title_summary["title"],
