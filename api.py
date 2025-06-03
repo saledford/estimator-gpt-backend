@@ -221,10 +221,14 @@ DOCUMENTS:
                 continue
 
         if not title_summary.get("summary") or not all_takeoff:
-            logger.warning("GPT returned no usable summary or takeoff")
+            logger.warning("GPT scan returned no usable summary or takeoff")
             return JSONResponse(
                 status_code=400,
-                content={"detail": "GPT scan returned no usable summary or takeoff items."}
+                content={
+                    "detail": "GPT scan returned no usable summary or takeoff items.",
+                    "summary": title_summary.get("summary", ""),
+                    "takeoff_count": len(all_takeoff)
+                }
             )
 
         return JSONResponse(content={
