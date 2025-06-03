@@ -1,4 +1,3 @@
-```python
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -274,4 +273,3 @@ DOCUMENTS:
     except Exception as e:
         logger.error(f"Full scan failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to scan project: {str(e)}")
-```
