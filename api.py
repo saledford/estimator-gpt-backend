@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from typing import List
@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import json
 
+# === INIT ===
 load_dotenv()
 client = OpenAI()
-
 app = FastAPI()
 
 app.add_middleware(
@@ -22,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === LOGGING ===
 logging.basicConfig(
     filename="quote_parsing.log",
     level=logging.INFO,
@@ -29,6 +30,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# === CONSTANTS ===
 CSI_DIVISIONS = {
     "01": "General Requirements",
     "02": "Existing Conditions",
@@ -59,9 +61,10 @@ CSI_DIVISIONS = {
 UPLOAD_DIR = "./temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# === ROUTES ===
+
 @app.get("/")
 async def root():
-    logger.info("Root endpoint accessed")
     return {"message": "Estimator GPT backend is running"}
 
 @app.post("/api/upload-file")
@@ -75,15 +78,14 @@ async def upload_file(file: UploadFile = File(...)):
         return {"fileId": file_id, "name": file.filename}
     except Exception as e:
         logger.error(f"Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": f"Upload failed: {str(e)}"})
 
 @app.get("/api/get-file/{file_id}")
 async def get_file(file_id: str):
     path = os.path.join(UPLOAD_DIR, file_id)
     if not os.path.exists(path):
         logger.error(f"File not found: {file_id}")
-        raise HTTPException(status_code=404, detail="File not found")
-    logger.info(f"Retrieved file: {file_id}")
+        return JSONResponse(status_code=404, content={"detail": "File not found"})
     return FileResponse(path, filename=file_id)
 
 @app.delete("/api/delete-file/{file_id}")
@@ -94,15 +96,15 @@ async def delete_file(file_id: str):
         logger.info(f"Deleted file: {file_id}")
         return {"message": f"{file_id} deleted"}
     logger.error(f"File not found for deletion: {file_id}")
-    raise HTTPException(status_code=404, detail="File not found")
+    return JSONResponse(status_code=404, content={"detail": "File not found"})
 
 @app.post("/api/full-scan")
 async def full_scan(files: List[UploadFile] = File(...)):
     if not files:
-        logger.error("No files provided for full scan")
-        raise HTTPException(status_code=400, detail="No files provided")
+        return JSONResponse(status_code=400, content={"detail": "No files provided"})
 
     try:
+        # === Step 1: Combine file text ===
         text_parts = []
         for file in files:
             content = await file.read()
@@ -124,13 +126,13 @@ async def full_scan(files: List[UploadFile] = File(...)):
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters")
 
-        # Title and Summary
+        # === Step 2: Title and Summary ===
         prompt_title_summary = f"""
 You are a professional construction estimator AI.
 
 From the following construction documents, extract the following:
 1. "title": A short, clean project name
-2. "summary": A 4–6 sentence narrative describing the full project scope
+2. "summary": A 4–6 sentence overview of the full project scope
 
 Return JSON:
 {{ "title": "...", "summary": "..." }}
@@ -149,20 +151,23 @@ DOCUMENTS:
                 max_tokens=3500
             )
             raw = response.choices[0].message.content.strip()
-            logger.info(f"Raw title/summary: {raw}")
+            logger.info(f"Title/Summary GPT Output: {raw}")
             title_summary = json.loads(raw.replace("'", '"'))
             if not title_summary.get("summary"):
-                raise ValueError("Empty summary")
+                raise ValueError("Empty summary returned by GPT")
         except Exception as e:
-            logger.error(f"Title/summary failed: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Failed to generate valid project summary: {str(e)}")
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"Failed to generate valid project summary: {str(e)}"}
+            )
 
-        # Division Descriptions
+        # === Step 3: Division Descriptions ===
         prompt_divisions = f"""
-From the construction documents, return descriptions for each CSI division 01–33. If missing, say 'Division XX not found in documents.'
+From the construction documents, return descriptions for each CSI division 01–33.
+If a division is not mentioned, return "Division XX not found in documents."
 
 Return JSON:
-{{ "03": "...", ..., "33": "Division 33 not found in documents." }}
+{{ "01": "...", "02": "...", ..., "33": "..." }}
 
 DOCUMENTS:
 {document_text}
@@ -178,25 +183,29 @@ DOCUMENTS:
                 max_tokens=3500
             )
             raw = response.choices[0].message.content.strip()
-            logger.info(f"Raw division descriptions: {raw}")
+            logger.info(f"Division Descriptions GPT Output: {raw}")
             division_descriptions = json.loads(raw.replace("'", '"'))
         except Exception as e:
-            logger.error(f"Division descriptions failed: {str(e)}")
+            logger.warning(f"Division description fallback: {str(e)}")
             division_descriptions = {k: f"Division {k} not found in documents." for k in CSI_DIVISIONS}
 
-        # Takeoff Items by Division
+        # === Step 4: Takeoff by Division ===
         all_takeoff = []
         for div_id, div_name in CSI_DIVISIONS.items():
             prompt = f"""
-Extract takeoff items for Division {div_id} – {div_name} from the documents.
+Extract takeoff items only for Division {div_id} – {div_name}.
 
-Return JSON array with:
-- division
-- description
-- quantity
-- unit
-- unitCost
-- modifier (optional)
+Return a JSON array:
+[
+  {{
+    "division": "{div_id}",
+    "description": "...",
+    "quantity": 0,
+    "unit": "SF",
+    "unitCost": 0.0,
+    "modifier": 0
+  }}
+]
 
 DOCUMENTS:
 {document_text}
@@ -212,16 +221,16 @@ DOCUMENTS:
                     max_tokens=3500
                 )
                 raw = response.choices[0].message.content.strip()
-                logger.info(f"Takeoff for division {div_id}: {raw}")
+                logger.info(f"Takeoff GPT Output for {div_id}: {raw}")
                 items = json.loads(raw.replace("'", '"'))
                 if isinstance(items, list):
                     all_takeoff.extend(items)
             except Exception as e:
-                logger.warning(f"Takeoff failed for {div_id}: {str(e)}")
+                logger.warning(f"Division {div_id} takeoff failed: {str(e)}")
                 continue
 
+        # === Step 5: Validation ===
         if not title_summary.get("summary") or not all_takeoff:
-            logger.warning("GPT scan returned no usable summary or takeoff")
             return JSONResponse(
                 status_code=400,
                 content={
@@ -232,14 +241,15 @@ DOCUMENTS:
             )
 
         return JSONResponse(content={
-            "title": title_summary.get("title", "Untitled Project"),
+            "title": title_summary["title"],
             "summary": title_summary["summary"],
             "divisionDescriptions": division_descriptions,
             "takeoff": all_takeoff
         })
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Unhandled error in full scan: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Full scan failed: {str(e)}")
+        logger.error(f"Unhandled full scan failure: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Full scan failed: {str(e)}"}
+        )
