@@ -1,3 +1,4 @@
+```python
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -106,7 +107,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        # Stage 1: Combine uploaded documents
+        # Combine file content
         text_parts = []
         for file in files:
             content = await file.read()
@@ -128,7 +129,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters")
 
-        # Stage 2: Extract title and summary
+        # Extract title and summary
         prompt_title_summary = f"""
 You are a professional construction estimator AI.
 
@@ -160,11 +161,14 @@ DOCUMENTS:
             title_summary = json.loads(raw_title_summary.replace("'", '"'))
             if not isinstance(title_summary, dict) or "title" not in title_summary or "summary" not in title_summary:
                 raise ValueError("Invalid title/summary structure")
+            if not title_summary["summary"]:
+                logger.warning("GPT returned empty summary")
+                raise ValueError("Empty summary returned")
         except Exception as e:
             logger.error(f"Failed to extract title/summary: {str(e)}")
-            title_summary = {"title": "Untitled Project", "summary": "Unable to generate project summary."}
+            raise HTTPException(status_code=400, detail=f"Failed to generate valid project summary: {str(e)}")
 
-        # Stage 3: Extract division descriptions
+        # Extract division descriptions
         prompt_division_descriptions = f"""
 From the following construction documents, return a dictionary of CSI division scope descriptions.
 
@@ -202,7 +206,7 @@ DOCUMENTS:
             logger.error(f"Failed to extract division descriptions: {str(e)}")
             division_descriptions = {div: f"Division {div} not found in documents." for div in CSI_DIVISIONS}
 
-        # Stage 4: Extract takeoff items division by division
+        # Extract takeoff items division by division
         all_takeoff_items = []
         for division_id, division_title in CSI_DIVISIONS.items():
             prompt_takeoff = f"""
@@ -250,7 +254,12 @@ DOCUMENTS:
                 logger.error(f"Failed to extract takeoff for division {division_id}: {str(e)}")
                 continue
 
-        # Stage 5: Build final JSON response
+        # Validate takeoff results
+        if not all_takeoff_items:
+            logger.warning("GPT returned empty takeoff list")
+            raise HTTPException(status_code=400, detail="No valid takeoff items generated")
+
+        # Build final JSON response
         result = {
             "title": title_summary.get("title", "Untitled Project"),
             "summary": title_summary.get("summary", "Unable to generate project summary."),
@@ -260,6 +269,9 @@ DOCUMENTS:
         logger.info(f"Full scan completed: title={result['title']}, {len(result['takeoff'])} takeoff items")
         return JSONResponse(content=result)
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Full scan failed: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Failed to scan project: {str(e)}"})
+        raise HTTPException(status_code=500, detail=f"Failed to scan project: {str(e)}")
+```
