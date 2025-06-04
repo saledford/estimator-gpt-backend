@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from typing import List
@@ -92,7 +92,6 @@ async def extract_text_from_files(files: List[UploadFile]) -> str:
     full_text = "\n\n".join(text_chunks)
     return full_text[:40000] if len(full_text) > 40000 else full_text
 
-# === 1. Generate Title & Summary ===
 @app.post("/api/generate-summary")
 async def generate_summary(files: List[UploadFile] = File(...)):
     try:
@@ -126,7 +125,6 @@ DOCUMENTS:
         logger.error(f"Summary error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Summary generation failed: {str(e)}"})
 
-# === 2. Generate Division Descriptions ===
 @app.post("/api/generate-divisions")
 async def generate_divisions(files: List[UploadFile] = File(...)):
     try:
@@ -149,12 +147,11 @@ DOCUMENTS:
         if raw.startswith("```json"):
             raw = raw.strip("` \n").replace("json", "").strip()
         parsed = json.loads(raw.replace("'", '"'))
-        return parsed
+        return {"divisionDescriptions": parsed}
     except Exception as e:
         logger.error(f"Division error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Division generation failed: {str(e)}"})
 
-# === 3. Extract Takeoff Per Division ===
 @app.post("/api/extract-takeoff")
 async def extract_takeoff(files: List[UploadFile] = File(...)):
     try:
@@ -199,3 +196,38 @@ DOCUMENTS:
     except Exception as e:
         logger.error(f"Takeoff error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Takeoff generation failed: {str(e)}"})
+
+@app.post("/api/chat")
+async def chat(request: Request):
+    try:
+        data = await request.json()
+        messages = data.get("discussion", [])
+        project_data = data.get("project_data", {})
+
+        prompt = f"Project data: {json.dumps(project_data, indent=2)}"
+        logger.info("Initiating chat reply...")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant familiar with construction estimating."},
+                *[{"role": "user", "content": m["text"]} for m in messages if m["sender"] == "User"],
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.5,
+            max_tokens=1000
+        )
+        reply = response.choices[0].message.content.strip()
+        return {"reply": reply}
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": f"Chat failed: {str(e)}"})
+
+@app.post("/api/submit-feedback")
+async def submit_feedback(request: Request):
+    try:
+        data = await request.json()
+        logger.info(f"Feedback received: {json.dumps(data)}")
+        return {"message": "Feedback logged"}
+    except Exception as e:
+        logger.error(f"Feedback logging failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": f"Feedback submission failed: {str(e)}"})
