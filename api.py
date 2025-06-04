@@ -201,18 +201,44 @@ DOCUMENTS:
 async def chat(request: Request):
     try:
         data = await request.json()
-        messages = data.get("discussion", [])
+        discussion = data.get("discussion", [])
         project_data = data.get("project_data", {})
 
-        prompt = f"Project data: {json.dumps(project_data, indent=2)}"
-        logger.info("Initiating chat reply...")
+        # Construct prompt context
+        context = """
+You are a construction estimator assistant helping a contractor with project planning.
+Here is the current project data:
+
+SUMMARY:
+{summary}
+
+NOTES:
+{notes}
+
+DIVISION SCOPES:
+{divisionDescriptions}
+
+TAKEOFF:
+{takeoff}
+
+PREFERENCES:
+{preferences}
+""".format(
+            summary=project_data.get("summary", ""),
+            notes=json.dumps(project_data.get("notes", []), indent=2),
+            divisionDescriptions=json.dumps(project_data.get("divisionDescriptions", {}), indent=2),
+            takeoff=json.dumps(project_data.get("takeoff", []), indent=2),
+            preferences=json.dumps(project_data.get("preferences", {}), indent=2),
+        )
+
+        messages = [
+            {"role": "system", "content": context},
+            *[{"role": "user", "content": m["text"]} for m in discussion if m["sender"] == "User"]
+        ]
+
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant familiar with construction estimating."},
-                *[{"role": "user", "content": m["text"]} for m in messages if m["sender"] == "User"],
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             temperature=0.5,
             max_tokens=1000
         )
