@@ -64,6 +64,7 @@ CSI_DIVISIONS = {
 
 UPLOAD_DIR = "./temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+files_storage: Dict[str, str] = {}  # Track file_id to filepath
 
 @app.on_event("startup")
 async def log_routes():
@@ -78,10 +79,15 @@ async def root():
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     try:
+        if not file.filename:
+            logger.error("No file provided for upload")
+            raise HTTPException(status_code=400, detail="No file provided")
         file_id = str(uuid.uuid4())
         path = os.path.join(UPLOAD_DIR, file_id)
         with open(path, "wb") as f:
-            f.write(await file.read())
+            content = await file.read()
+            f.write(content)
+        files_storage[file_id] = path
         logger.info(f"Uploaded file: {file.filename}, File ID: {file_id}")
         return {"fileId": file_id, "name": file.filename}
     except Exception as e:
@@ -90,29 +96,46 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.get("/api/get-file/{file_id}")
 async def get_file(file_id: str):
-    path = os.path.join(UPLOAD_DIR, file_id)
-    if not os.path.exists(path):
+    if file_id not in files_storage:
         logger.error(f"File not found: {file_id}")
         raise HTTPException(status_code=404, detail="File not found")
-    logger.info(f"Retrieved file: {file_id}")
-    return FileResponse(path, filename=file_id)
+    path = files_storage[file_id]
+    if not os.path.exists(path):
+        logger.error(f"File path does not exist: {path}")
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        logger.info(f"Retrieved file: {file_id}")
+        return FileResponse(path, filename=file_id)
+    except Exception as e:
+        logger.error(f"Error retrieving file {file_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File retrieval failed: {str(e)}")
 
 @app.delete("/api/delete-file/{file_id}")
 async def delete_file(file_id: str):
-    path = os.path.join(UPLOAD_DIR, file_id)
-    if os.path.exists(path):
+    if file_id not in files_storage:
+        logger.error(f"File not found for deletion: {file_id}")
+        raise HTTPException(status_code=404, detail="File not found")
+    path = files_storage[file_id]
+    if not os.path.exists(path):
+        logger.error(f"File path does not exist for deletion: {path}")
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
         os.remove(path)
+        del files_storage[file_id]
         logger.info(f"Deleted file: {file_id}")
         return {"message": f"{file_id} deleted"}
-    logger.error(f"File not found for deletion: {file_id}")
-    raise HTTPException(status_code=404, detail="File not found")
+    except Exception as e:
+        logger.error(f"Error deleting file {file_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File deletion failed: {str(e)}")
 
 @app.post("/api/parse-spec")
 async def parse_spec(file: UploadFile = File(...)):
     try:
         if not file.filename.lower().endswith(".pdf"):
+            logger.error(f"Invalid file type: {file.filename}. Only PDF files are supported.")
             return JSONResponse(status_code=400, content={"detail": "Only PDF files are supported."})
 
+        logger.info(f"Received file: {file.filename}")
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
 
@@ -164,18 +187,34 @@ async def generate_summary(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        text_parts = []
+        file_ids = []
         for file in files:
+            if not file.filename:
+                logger.error("Empty filename in summary file upload")
+                raise HTTPException(status_code=400, detail="Empty filename provided")
             logger.info(f"Received file: {file.filename}")
-            content = await file.read()
-            if file.filename.lower().endswith(".pdf"):
-                doc = fitz.open(stream=content, filetype="pdf")
-                for page in doc:
-                    text_parts.append(page.get_text())
-                doc.close()
-            else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file for summary: {file.filename}")
+            file_id = str(uuid.uuid4())
+            path = os.path.join(UPLOAD_DIR, file_id)
+            with open(path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            files_storage[file_id] = path
+            file_ids.append(file_id)
+            logger.info(f"Stored file for summary: {file.filename}, File ID: {file_id}")
+
+        text_parts = []
+        for file_id in file_ids:
+            if not os.path.exists(files_storage[file_id]):
+                logger.error(f"File not found for summary: {file_id}")
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+            with open(files_storage[file_id], "rb") as f:
+                if files_storage[file_id].lower().endswith(".pdf"):
+                    doc = fitz.open(stream=f.read(), filetype="pdf")
+                    for page in doc:
+                        text_parts.append(page.get_text())
+                    doc.close()
+                else:
+                    text_parts.append(f.read().decode("utf-8", errors="ignore"))
 
         document_text = "\n\n".join(text_parts)
         if len(document_text) > 40000:
@@ -226,18 +265,34 @@ async def generate_divisions(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        text_parts = []
+        file_ids = []
         for file in files:
+            if not file.filename:
+                logger.error("Empty filename in divisions file upload")
+                raise HTTPException(status_code=400, detail="Empty filename provided")
             logger.info(f"Received file: {file.filename}")
-            content = await file.read()
-            if file.filename.lower().endswith(".pdf"):
-                doc = fitz.open(stream=content, filetype="pdf")
-                for page in doc:
-                    text_parts.append(page.get_text())
-                doc.close()
-            else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file for divisions: {file.filename}")
+            file_id = str(uuid.uuid4())
+            path = os.path.join(UPLOAD_DIR, file_id)
+            with open(path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            files_storage[file_id] = path
+            file_ids.append(file_id)
+            logger.info(f"Stored file for divisions: {file.filename}, File ID: {file_id}")
+
+        text_parts = []
+        for file_id in file_ids:
+            if not os.path.exists(files_storage[file_id]):
+                logger.error(f"File not found for divisions: {file_id}")
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+            with open(files_storage[file_id], "rb") as f:
+                if files_storage[file_id].lower().endswith(".pdf"):
+                    doc = fitz.open(stream=f.read(), filetype="pdf")
+                    for page in doc:
+                        text_parts.append(page.get_text())
+                    doc.close()
+                else:
+                    text_parts.append(f.read().decode("utf-8", errors="ignore"))
 
         document_text = "\n\n".join(text_parts)
         if len(document_text) > 40000:
@@ -289,18 +344,34 @@ async def extract_takeoff(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        text_parts = []
+        file_ids = []
         for file in files:
+            if not file.filename:
+                logger.error("Empty filename in takeoff file upload")
+                raise HTTPException(status_code=400, detail="Empty filename provided")
             logger.info(f"Received file: {file.filename}")
-            content = await file.read()
-            if file.filename.lower().endswith(".pdf"):
-                doc = fitz.open(stream=content, filetype="pdf")
-                for page in doc:
-                    text_parts.append(page.get_text())
-                doc.close()
-            else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file for takeoff: {file.filename}")
+            file_id = str(uuid.uuid4())
+            path = os.path.join(UPLOAD_DIR, file_id)
+            with open(path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            files_storage[file_id] = path
+            file_ids.append(file_id)
+            logger.info(f"Stored file for takeoff: {file.filename}, File ID: {file_id}")
+
+        text_parts = []
+        for file_id in file_ids:
+            if not os.path.exists(files_storage[file_id]):
+                logger.error(f"File not found for takeoff: {file_id}")
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+            with open(files_storage[file_id], "rb") as f:
+                if files_storage[file_id].lower().endswith(".pdf"):
+                    doc = fitz.open(stream=f.read(), filetype="pdf")
+                    for page in doc:
+                        text_parts.append(page.get_text())
+                    doc.close()
+                else:
+                    text_parts.append(f.read().decode("utf-8", errors="ignore"))
 
         document_text = "\n\n".join(text_parts)
         if len(document_text) > 40000:
@@ -367,22 +438,38 @@ async def full_scan(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        text_parts = []
+        file_ids = []
         for file in files:
+            if not file.filename:
+                logger.error("Empty filename in full scan file upload")
+                raise HTTPException(status_code=400, detail="Empty filename provided")
             logger.info(f"Received file: {file.filename}")
-            content = await file.read()
-            if file.filename.lower().endswith(".pdf"):
-                doc = fitz.open(stream=content, filetype="pdf")
-                for page in doc:
-                    text_parts.append(page.get_text())
-                doc.close()
-            elif file.filename.lower().endswith(".xlsx"):
-                text_parts.append(f"(Excel file uploaded: {file.filename})")
-            elif file.filename.lower().endswith(".docx"):
-                text_parts.append(f"(Word doc uploaded: {file.filename})")
-            else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file: {file.filename}")
+            file_id = str(uuid.uuid4())
+            path = os.path.join(UPLOAD_DIR, file_id)
+            with open(path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            files_storage[file_id] = path
+            file_ids.append(file_id)
+            logger.info(f"Stored file for full scan: {file.filename}, File ID: {file_id}")
+
+        text_parts = []
+        for file_id in file_ids:
+            if not os.path.exists(files_storage[file_id]):
+                logger.error(f"File not found for full scan: {file_id}")
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+            with open(files_storage[file_id], "rb") as f:
+                if files_storage[file_id].lower().endswith(".pdf"):
+                    doc = fitz.open(stream=f.read(), filetype="pdf")
+                    for page in doc:
+                        text_parts.append(page.get_text())
+                    doc.close()
+                elif files_storage[file_id].lower().endswith(".xlsx"):
+                    text_parts.append(f"(Excel file uploaded: {os.path.basename(files_storage[file_id])})")
+                elif files_storage[file_id].lower().endswith(".docx"):
+                    text_parts.append(f"(Word doc uploaded: {os.path.basename(files_storage[file_id])})")
+                else:
+                    text_parts.append(f.read().decode("utf-8", errors="ignore"))
 
         document_text = "\n\n".join(text_parts)
         if len(document_text) > 40000:
@@ -560,7 +647,7 @@ async def chat(request: Request):
             match_score = sum(1 for word in latest_question.split() if word in s["text"].lower())
             if match_score > 0:
                 relevant_specs.append((match_score, s))
-        relevant_specs.sort(reverse=True)
+        relevant_specs.sort(key=lambda x: x[0], reverse=True)
         top_matches = [s["title"] + "\n\n" + s["text"][:3000] for _, s in relevant_specs[:3]]
         spec_excerpt = "\n\n---\n\n".join(top_matches)
 
