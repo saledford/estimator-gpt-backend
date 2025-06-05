@@ -253,8 +253,12 @@ DOCUMENTS:
             max_tokens=3500
         )
         raw_response = response.choices[0].message.content.strip()
-        logger.info(f"Raw GPT summary response: {raw_response}")
-        parsed = json.loads(raw_response.replace("'", '"'))
+        logger.info(f"GPT summary raw response: {raw_response}")
+        try:
+            parsed = json.loads(raw_response.replace("'", '"'))
+        except Exception as e:
+            logger.error(f"Summary parse error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"GPT returned invalid summary: {str(e)}")
         if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
             raise ValueError("Invalid summary response structure")
 
