@@ -8,6 +8,7 @@ import re
 import os
 import uuid
 import logging
+import traceback
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
@@ -107,25 +108,20 @@ async def delete_file(file_id: str):
     raise HTTPException(status_code=404, detail="File not found")
 
 @app.post("/api/parse-spec")
-async def parse_spec(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for spec parsing")
-        raise HTTPException(status_code=400, detail="No files provided")
-
+async def parse_spec(file: UploadFile = File(...)):
     try:
-        text_parts = []
-        for file in files:
-            content = await file.read()
-            if file.filename.lower().endswith(".pdf"):
-                doc = fitz.open(stream=content, filetype="pdf")
-                for page in doc:
-                    text_parts.append(page.get_text())
-                doc.close()
-            else:
-                text_parts.append(content.decode("utf-8", errors="ignore"))
-            logger.info(f"Processed file for spec parsing: {file.filename}")
+        logger.info(f"Received file: {file.filename}")
+        content = await file.read()
+        document_text = ""
+        if file.filename.lower().endswith(".pdf"):
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                document_text += page.get_text()
+            doc.close()
+        else:
+            document_text = content.decode("utf-8", errors="ignore")
+        logger.info(f"Processed file for spec parsing: {file.filename}")
 
-        document_text = "\n\n".join(text_parts)
         if len(document_text) > 40000:
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters for spec parsing")
@@ -162,7 +158,8 @@ DOCUMENTS:
         return JSONResponse(content={"descriptions": parsed})
     except Exception as e:
         logger.error(f"Spec parsing failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Spec parsing failed: {str(e)}")
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"detail": f"Spec parsing failed: {str(e)}"})
 
 @app.post("/api/generate-summary")
 async def generate_summary(files: List[UploadFile] = File(...)):
@@ -173,6 +170,7 @@ async def generate_summary(files: List[UploadFile] = File(...)):
     try:
         text_parts = []
         for file in files:
+            logger.info(f"Received file: {file.filename}")
             content = await file.read()
             if file.filename.lower().endswith(".pdf"):
                 doc = fitz.open(stream=content, filetype="pdf")
@@ -234,6 +232,7 @@ async def generate_divisions(files: List[UploadFile] = File(...)):
     try:
         text_parts = []
         for file in files:
+            logger.info(f"Received file: {file.filename}")
             content = await file.read()
             if file.filename.lower().endswith(".pdf"):
                 doc = fitz.open(stream=content, filetype="pdf")
@@ -296,6 +295,7 @@ async def extract_takeoff(files: List[UploadFile] = File(...)):
     try:
         text_parts = []
         for file in files:
+            logger.info(f"Received file: {file.filename}")
             content = await file.read()
             if file.filename.lower().endswith(".pdf"):
                 doc = fitz.open(stream=content, filetype="pdf")
@@ -373,6 +373,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
     try:
         text_parts = []
         for file in files:
+            logger.info(f"Received file: {file.filename}")
             content = await file.read()
             if file.filename.lower().endswith(".pdf"):
                 doc = fitz.open(stream=content, filetype="pdf")
@@ -402,8 +403,8 @@ From the following construction documents, extract the following:
 
 Return JSON:
 {{
-  "title": "...",
-  "summary": "..."
+    "title": "...",
+    "summary": "..."
 }}
 
 DOCUMENTS:
@@ -441,10 +442,10 @@ For each of Divisions 01 through 33:
 
 Return JSON:
 {{
-  "01": "...",
-  "02": "...",
-  ...
-  "33": "Division 33 not found in documents."
+    "01": "...",
+    "02": "...",
+    ...
+    "33": "Division 33 not found in documents."
 }}
 
 DOCUMENTS:
