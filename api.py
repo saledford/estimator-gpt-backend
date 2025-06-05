@@ -87,12 +87,14 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="No file uploaded.")
 
         file_id = str(uuid.uuid4())
-        path = os.path.join("temp_uploads", file_id)
+        path = os.path.join(UPLOAD_DIR, file_id)
 
         with open(path, "wb") as f:
-            f.write(await file.read())
+            content = await file.read()
+            f.write(content)
 
-        logger.info(f"✅ Saved: {file.filename} → {file_id}")
+        files_storage[file_id] = path
+        logger.info(f"✅ Saved: {file.filename} → {file_id} at {path}")
         return {"fileId": file_id, "name": file.filename}
     except Exception as e:
         logger.error(f"Upload failed: {str(e)}")
@@ -101,14 +103,14 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/api/get-file/{file_id}")
 async def get_file(file_id: str):
     if file_id not in files_storage:
-        logger.error(f"File not found: {file_id}")
+        logger.error(f"❌ File ID not found in storage: {file_id}")
         raise HTTPException(status_code=404, detail="File not found")
     path = files_storage[file_id]
     if not os.path.exists(path):
-        logger.error(f"File path does not exist: {path}")
+        logger.error(f"❌ File not found on disk: {path}")
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        logger.info(f"Retrieved file: {file_id}")
+        logger.info(f"✅ Serving file: {file_id} from {path}")
         return FileResponse(path, filename=file_id)
     except Exception as e:
         logger.error(f"Error retrieving file {file_id}: {str(e)}")
