@@ -110,54 +110,49 @@ async def delete_file(file_id: str):
 @app.post("/api/parse-spec")
 async def parse_spec(file: UploadFile = File(...)):
     try:
-        logger.info(f"Received file: {file.filename}")
         if not file.filename.lower().endswith(".pdf"):
-            logger.error(f"Invalid file type: {file.filename}. Only PDF files are supported.")
             return JSONResponse(status_code=400, content={"detail": "Only PDF files are supported."})
 
         content = await file.read()
         doc = fitz.open(stream=content, filetype="pdf")
-        document_text = ""
+
+        sections = []
+        section_text = ""
+        current_section = None
+        current_title = None
+
         for page in doc:
-            document_text += page.get_text()
+            text = page.get_text()
+            lines = text.splitlines()
+            for line in lines:
+                if line.strip().startswith("SECTION"):
+                    if current_section and section_text:
+                        sections.append({
+                            "section": current_section,
+                            "title": current_title,
+                            "text": section_text.strip()
+                        })
+                        section_text = ""
+                    parts = line.strip().split(" ", 2)
+                    if len(parts) >= 3:
+                        current_section = parts[1].strip()
+                        current_title = parts[2].strip()
+                elif current_section:
+                    section_text += line.strip() + "\n"
+
+        if current_section and section_text:
+            sections.append({
+                "section": current_section,
+                "title": current_title,
+                "text": section_text.strip()
+            })
+
         doc.close()
-        logger.info(f"Processed file for spec parsing: {file.filename}")
+        logger.info(f"Parsed {len(sections)} spec sections from {file.filename}")
+        return {"specIndex": sections}
 
-        if len(document_text) > 40000:
-            document_text = document_text[:40000]
-            logger.warning("Truncated document text to 40,000 characters for spec parsing")
-
-        prompt = f"""
-You are a construction analyst extracting specifications by CSI Division.
-
-Return a JSON dictionary where keys are CSI division numbers (e.g., "03", "09") and values are detailed scope descriptions (2–4 sentences each). Exclude divisions not mentioned.
-
-Example:
-{{
-  "03": "Concrete work includes demolition of existing slabs, pouring 6-inch reinforced slabs with vapor barrier, and rebar per structural details.",
-  "09": "Finishes include moisture mitigation, LVT flooring, gypsum ceilings, and full interior painting."
-}}
-
-DOCUMENTS:
-{document_text}
-"""
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert construction analyst."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.4,
-            max_tokens=3500
-        )
-        raw_response = response.choices[0].message.content.strip()
-        logger.info(f"Raw GPT spec parsing response: {raw_response}")
-        parsed = json.loads(raw_response.replace("'", '"'))
-        if not isinstance(parsed, dict):
-            raise ValueError("Invalid spec parsing response structure")
-
-        return JSONResponse(content={"descriptions": parsed})
     except Exception as e:
+        import traceback
         logger.error(f"Spec parsing failed: {str(e)}")
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": f"Spec parsing failed: {str(e)}"})
