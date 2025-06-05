@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from typing import List, Dict
+from pydantic import BaseModel
 import fitz  # PyMuPDF
 import re
 import os
@@ -19,6 +20,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -62,6 +64,11 @@ CSI_DIVISIONS = {
 UPLOAD_DIR = "./temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+@app.on_event("startup")
+async def log_routes():
+    for route in app.routes:
+        logger.info(f"Route: {route.path} [{','.join(route.methods)}]")
+
 @app.get("/")
 async def root():
     logger.info("Root endpoint accessed")
@@ -99,6 +106,264 @@ async def delete_file(file_id: str):
     logger.error(f"File not found for deletion: {file_id}")
     raise HTTPException(status_code=404, detail="File not found")
 
+@app.post("/api/parse-spec")
+async def parse_spec(files: List[UploadFile] = File(...)):
+    if not files:
+        logger.error("No files provided for spec parsing")
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    try:
+        text_parts = []
+        for file in files:
+            content = await file.read()
+            if file.filename.lower().endswith(".pdf"):
+                doc = fitz.open(stream=content, filetype="pdf")
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+            else:
+                text_parts.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Processed file for spec parsing: {file.filename}")
+
+        document_text = "\n\n".join(text_parts)
+        if len(document_text) > 40000:
+            document_text = document_text[:40000]
+            logger.warning("Truncated document text to 40,000 characters for spec parsing")
+
+        prompt = f"""
+You are a construction analyst extracting specifications by CSI Division.
+
+Return a JSON dictionary where keys are CSI division numbers (e.g., "03", "09") and values are detailed scope descriptions (2–4 sentences each). Exclude divisions not mentioned.
+
+Example:
+{{
+  "03": "Concrete work includes demolition of existing slabs, pouring 6-inch reinforced slabs with vapor barrier, and rebar per structural details.",
+  "09": "Finishes include moisture mitigation, LVT flooring, gypsum ceilings, and full interior painting."
+}}
+
+DOCUMENTS:
+{document_text}
+"""
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert construction analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        raw_response = response.choices[0].message.content.strip()
+        logger.info(f"Raw GPT spec parsing response: {raw_response}")
+        parsed = json.loads(raw_response.replace("'", '"'))
+        if not isinstance(parsed, dict):
+            raise ValueError("Invalid spec parsing response structure")
+
+        return JSONResponse(content={"descriptions": parsed})
+    except Exception as e:
+        logger.error(f"Spec parsing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Spec parsing failed: {str(e)}")
+
+@app.post("/api/generate-summary")
+async def generate_summary(files: List[UploadFile] = File(...)):
+    if not files:
+        logger.error("No files provided for summary generation")
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    try:
+        text_parts = []
+        for file in files:
+            content = await file.read()
+            if file.filename.lower().endswith(".pdf"):
+                doc = fitz.open(stream=content, filetype="pdf")
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+            else:
+                text_parts.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Processed file for summary: {file.filename}")
+
+        document_text = "\n\n".join(text_parts)
+        if len(document_text) > 40000:
+            document_text = document_text[:40000]
+            logger.warning("Truncated document text to 40,000 characters for summary")
+
+        prompt = f"""
+You are a construction estimator AI.
+
+Generate:
+1. "title": A short, clean project name (4–8 words, no symbols)
+2. "summary": A detailed narrative (4–6 sentences) describing the project scope, building type, and key improvements.
+
+Return JSON:
+{{
+  "title": "...",
+  "summary": "..."
+}}
+
+DOCUMENTS:
+{document_text}
+"""
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        raw_response = response.choices[0].message.content.strip()
+        logger.info(f"Raw GPT summary response: {raw_response}")
+        parsed = json.loads(raw_response.replace("'", '"'))
+        if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
+            raise ValueError("Invalid summary response structure")
+
+        safe_title = re.sub(r'[^a-zA-Z0-9 _-]', '', parsed["title"])
+        return JSONResponse(content={"title": safe_title, "summary": parsed["summary"]})
+    except Exception as e:
+        logger.error(f"Summary generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
+
+@app.post("/api/generate-divisions")
+async def generate_divisions(files: List[UploadFile] = File(...)):
+    if not files:
+        logger.error("No files provided for divisions generation")
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    try:
+        text_parts = []
+        for file in files:
+            content = await file.read()
+            if file.filename.lower().endswith(".pdf"):
+                doc = fitz.open(stream=content, filetype="pdf")
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+            else:
+                text_parts.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Processed file for divisions: {file.filename}")
+
+        document_text = "\n\n".join(text_parts)
+        if len(document_text) > 40000:
+            document_text = document_text[:40000]
+            logger.warning("Truncated document text to 40,000 characters for divisions")
+
+        prompt = f"""
+You are a construction estimator AI.
+
+Identify all relevant CSI divisions in the documents. For each, provide a brief summary (1–2 sentences) indicating whether scope is detected.
+
+Return JSON:
+[
+  {{
+    "id": "03",
+    "title": "Concrete",
+    "summary": "Concrete scope detected including slabs and footings."
+  }},
+  ...
+]
+
+DOCUMENTS:
+{document_text}
+"""
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        raw_response = response.choices[0].message.content.strip()
+        logger.info(f"Raw GPT divisions response: {raw_response}")
+        parsed = json.loads(raw_response.replace("'", '"'))
+        if not isinstance(parsed, list):
+            raise ValueError("Invalid divisions response structure")
+
+        return JSONResponse(content={"divisions": parsed})
+    except Exception as e:
+        logger.error(f"Divisions generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Divisions generation failed: {str(e)}")
+
+@app.post("/api/extract-takeoff")
+async def extract_takeoff(files: List[UploadFile] = File(...)):
+    if not files:
+        logger.error("No files provided for takeoff extraction")
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    try:
+        text_parts = []
+        for file in files:
+            content = await file.read()
+            if file.filename.lower().endswith(".pdf"):
+                doc = fitz.open(stream=content, filetype="pdf")
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+            else:
+                text_parts.append(content.decode("utf-8", errors="ignore"))
+            logger.info(f"Processed file for takeoff: {file.filename}")
+
+        document_text = "\n\n".join(text_parts)
+        if len(document_text) > 40000:
+            document_text = document_text[:40000]
+            logger.warning("Truncated document text to 40,000 characters for takeoff")
+
+        prompt = f"""
+You are a construction estimator extracting takeoff items.
+
+Return a JSON list of items with:
+- division
+- description
+- quantity (numeric)
+- unit (e.g., SF, LF, EA)
+- unitCost (numeric, dollars)
+- modifier (percent, optional)
+
+Example:
+[
+  {{
+    "division": "03",
+    "description": "Pour 6-inch slab on grade",
+    "quantity": 2040,
+    "unit": "SF",
+    "unitCost": 9.90,
+    "modifier": 0
+  }}
+]
+
+DOCUMENTS:
+{document_text}
+"""
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=3500
+        )
+        raw_response = response.choices[0].message.content.strip()
+        logger.info(f"Raw GPT takeoff response: {raw_response}")
+        parsed = json.loads(raw_response.replace("'", '"'))
+        if not isinstance(parsed, list):
+            raise ValueError("Invalid takeoff response structure")
+
+        if not parsed:
+            logger.warning("GPT returned empty takeoff list")
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "GPT scan returned no usable takeoff items."}
+            )
+
+        return JSONResponse(content={"takeoff": parsed})
+    except Exception as e:
+        logger.error(f"Takeoff extraction failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Takeoff extraction failed: {str(e)}")
+
 @app.post("/api/full-scan")
 async def full_scan(files: List[UploadFile] = File(...)):
     if not files:
@@ -106,7 +371,6 @@ async def full_scan(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No files provided")
 
     try:
-        # Combine file content
         text_parts = []
         for file in files:
             content = await file.read()
