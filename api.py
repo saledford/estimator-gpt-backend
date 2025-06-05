@@ -79,16 +79,20 @@ async def root():
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     try:
+        logger.info("📥 Received upload request.")
+        logger.info(f"Filename: {file.filename}")
+
         if not file.filename:
-            logger.error("No file provided for upload")
-            raise HTTPException(status_code=400, detail="No file provided")
+            logger.error("❌ No file provided.")
+            raise HTTPException(status_code=400, detail="No file uploaded.")
+
         file_id = str(uuid.uuid4())
-        path = os.path.join(UPLOAD_DIR, file_id)
+        path = os.path.join("temp_uploads", file_id)
+
         with open(path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        files_storage[file_id] = path
-        logger.info(f"Uploaded file: {file.filename}, File ID: {file_id}")
+            f.write(await file.read())
+
+        logger.info(f"✅ Saved: {file.filename} → {file_id}")
         return {"fileId": file_id, "name": file.filename}
     except Exception as e:
         logger.error(f"Upload failed: {str(e)}")
