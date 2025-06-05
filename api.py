@@ -111,15 +111,16 @@ async def delete_file(file_id: str):
 async def parse_spec(file: UploadFile = File(...)):
     try:
         logger.info(f"Received file: {file.filename}")
+        if not file.filename.lower().endswith(".pdf"):
+            logger.error(f"Invalid file type: {file.filename}. Only PDF files are supported.")
+            return JSONResponse(status_code=400, content={"detail": "Only PDF files are supported."})
+
         content = await file.read()
+        doc = fitz.open(stream=content, filetype="pdf")
         document_text = ""
-        if file.filename.lower().endswith(".pdf"):
-            doc = fitz.open(stream=content, filetype="pdf")
-            for page in doc:
-                document_text += page.get_text()
-            doc.close()
-        else:
-            document_text = content.decode("utf-8", errors="ignore")
+        for page in doc:
+            document_text += page.get_text()
+        doc.close()
         logger.info(f"Processed file for spec parsing: {file.filename}")
 
         if len(document_text) > 40000:
