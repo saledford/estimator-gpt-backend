@@ -79,7 +79,7 @@ async def root():
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        logger.info("📥 Received upload request.")
+        logger.info("📥📥 Received upload request.")
         logger.info(f"Filename: {file.filename}")
 
         if not file.filename:
