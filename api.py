@@ -648,12 +648,12 @@ async def chat(request: Request):
         divisionDescriptions = json.dumps(project_data.get("divisionDescriptions", {}), indent=2)
         takeoff = json.dumps(project_data.get("takeoff", []), indent=2)
         preferences = json.dumps(project_data.get("preferences", {}), indent=2)
-        specIndex = project_data.get("specIndex", [])
+        spec_index = project_data.get("specIndex", [])
 
         # Extract relevant spec sections using keyword match
-        latest_question = discussion[-1]["text"].lower() if discussion else ""
+        latest_question = discussion[-1]["content"].lower() if discussion else ""
         relevant_specs = []
-        for s in specIndex:
+        for s in spec_index:
             match_score = sum(1 for word in latest_question.split() if word in s["text"].lower())
             if match_score > 0:
                 relevant_specs.append((match_score, s))
@@ -663,7 +663,8 @@ async def chat(request: Request):
 
         # Build system prompt
         context = f"""
-You are a helpful construction assistant. Respond in **clear, organized Markdown**, using headings, bold labels, and bullet points to make your replies easy to scan.
+You are a construction estimator assistant. You are helping a contractor review and understand a specific project. 
+Assume that every question refers to the current project unless otherwise stated.
 
 PROJECT SUMMARY:
 {summary}
@@ -680,19 +681,19 @@ TAKEOFF:
 PREFERENCES:
 {preferences}
 
-RELEVANT SPECS (from uploaded spec manual):
-{spec_excerpt if spec_excerpt else 'None matched. Use best judgment.'}
+RELEVANT SPECS:
+{spec_excerpt if spec_excerpt else 'None found in specIndex.'}
 """
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful construction assistant. Respond in **clear, organized Markdown**, using "
-                    "headings, bold labels, and bullet points to make your replies easy to scan."
+                    "You are a construction estimator assistant. You are helping a contractor review and understand a specific project. "
+                    "Assume that every user message refers to the project described below."
                 )
             },
-            *[{"role": "user", "content": m["text"]} for m in discussion if m["sender"] == "User"]
+            *[{"role": "user", "content": m["content"]} for m in discussion if m["sender"] == "user"]
         ]
 
         response = client.chat.completions.create(
@@ -711,12 +712,12 @@ RELEVANT SPECS (from uploaded spec manual):
             if "```json" in raw:
                 block = raw.split("```json")[1].split("```")[0].strip()
                 parsed = json.loads(block)
-                reply = parsed.get("reply", reply)
+                reply = parsed.get("reply", raw)
                 actions = parsed.get("actions", [])
         except Exception as parse_err:
             logger.warning(f"Failed to parse GPT actions: {str(parse_err)}")
 
-        return {"reply": reply, "actions": actions}
+        return JSONResponse(content={"reply": reply, "actions": actions})
 
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
