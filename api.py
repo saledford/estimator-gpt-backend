@@ -658,8 +658,10 @@ async def chat(request: Request):
             if match_score > 0:
                 relevant_specs.append((match_score, s))
         relevant_specs.sort(key=lambda x: x[0], reverse=True)
-        top_matches = [s["title"] + "\n\n" + s["text"][:3000] for _, s in relevant_specs[:3]]
-        spec_excerpt = "\n\n---\n\n".join(top_matches)
+        logger.info(f"Matched spec sections: {[s['title'] for _, s in relevant_specs[:3]]}")
+
+        spec_excerpt = "\n\n---\n\n".join([s["title"] + "\n\n" + s["text"][:3000] for _, s in relevant_specs[:3]])
+        logger.info(f"GPT spec excerpt (first 1000 chars):\n{spec_excerpt[:1000]}")
 
         # Build system prompt
         context = f"""
