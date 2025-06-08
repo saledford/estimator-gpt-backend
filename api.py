@@ -663,7 +663,7 @@ async def chat(request: Request):
 
         # Build system prompt
         context = f"""
-You are a construction estimator assistant helping a contractor.
+You are a helpful construction assistant. Respond in **clear, organized Markdown**, using headings, bold labels, and bullet points to make your replies easy to scan.
 
 PROJECT SUMMARY:
 {summary}
@@ -685,7 +685,13 @@ RELEVANT SPECS (from uploaded spec manual):
 """
 
         messages = [
-            {"role": "system", "content": context},
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful construction assistant. Respond in **clear, organized Markdown**, using "
+                    "headings, bold labels, and bullet points to make your replies easy to scan."
+                )
+            },
             *[{"role": "user", "content": m["text"]} for m in discussion if m["sender"] == "User"]
         ]
 
