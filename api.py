@@ -196,8 +196,7 @@ async def generate_summary(files: List[UploadFile] = File(...)):
         file_ids = []
         for file in files:
             if not file.filename:
-                logger.error("Empty filename in summary file upload")
-                raise HTTPException(status_code=400, detail="Empty filename provided")
+                continue
             logger.info(f"Received file: {file.filename}")
             file_id = str(uuid.uuid4())
             path = os.path.join(UPLOAD_DIR, file_id)
@@ -206,13 +205,11 @@ async def generate_summary(files: List[UploadFile] = File(...)):
                 f.write(content)
             files_storage[file_id] = path
             file_ids.append(file_id)
-            logger.info(f"Stored file for summary: {file.filename}, File ID: {file_id}")
 
         text_parts = []
         for file_id in file_ids:
             if not os.path.exists(files_storage[file_id]):
-                logger.error(f"File not found for summary: {file_id}")
-                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+                continue
             with open(files_storage[file_id], "rb") as f:
                 if files_storage[file_id].lower().endswith(".pdf"):
                     doc = fitz.open(stream=f.read(), filetype="pdf")
@@ -222,27 +219,38 @@ async def generate_summary(files: List[UploadFile] = File(...)):
                 else:
                     text_parts.append(f.read().decode("utf-8", errors="ignore"))
 
-        document_text = "\n\n".join(text_parts)
+        document_text = "\n\n".join(text_parts).strip()
+        if not document_text:
+            logger.warning("No readable text found in provided files")
+            raise HTTPException(status_code=400, detail="No readable text found")
+
         if len(document_text) > 40000:
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters for summary")
 
+        logger.info(f"Document preview (first 1000 chars):\n{document_text[:1000]}")
+
         prompt = f"""
-You are a construction assistant.
+You are a professional construction estimator's assistant. Summarize the uploaded project documents using the following structured format.
 
-Generate:
-1. "title": A short, clean project name (4–8 words, no symbols)
-2. "summary": A detailed narrative (4–6 sentences) describing the project scope, building type, and key improvements.
+Return a JSON object with:
+- "title": A clear, concise project title (4–10 words max)
+- "summary": A well-written, paragraph-formatted narrative broken into the following labeled sections:
+  1. **Project Title**
+  2. **Scope of Work**
+  3. **Project Timeline** (include start date, duration, penalties, etc. if found)
+  4. **Additional Notes** (e.g., special requirements, inspections, coordination notes, etc.)
 
-Return JSON:
+Example Output:
 {{
-  "title": "...",
-  "summary": "..."
+  "title": "Greenville Public Works Renovation",
+  "summary": "**Project Title:** Greenville Public Works Renovation\\n\\n**Scope of Work:** This project involves the interior renovation of...\\n\\n**Project Timeline:** Work is expected to begin in...\\n\\n**Additional Notes:** Coordinate with city inspector..."
 }}
 
 DOCUMENTS:
 {document_text}
 """
+
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -253,16 +261,18 @@ DOCUMENTS:
             max_tokens=3500
         )
         raw_response = response.choices[0].message.content.strip()
-        logger.info(f"GPT summary raw response: {raw_response}")
+        logger.info(f"Raw GPT summary response:\n{raw_response}")
+
         try:
             parsed = json.loads(raw_response.replace("'", '"'))
         except Exception as e:
             logger.error(f"Summary parse error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"GPT returned invalid summary: {str(e)}")
-        if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
-            raise ValueError("Invalid summary response structure")
+            raise HTTPException(status_code=500, detail="GPT returned invalid summary: " + str(e))
 
-        safe_title = re.sub(r'[^a-zA-Z0-9 _-]', '', parsed["title"])
+        if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
+            raise ValueError("Invalid summary structure")
+
+        safe_title = re.sub(r'[^a-zA-Z0-9 _]', '', parsed["title"])
         return JSONResponse(content={"title": safe_title, "summary": parsed["summary"]})
     except Exception as e:
         logger.error(f"Summary generation failed: {str(e)}")
@@ -467,7 +477,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
         for file_id in file_ids:
             if not os.path.exists(files_storage[file_id]):
                 logger.error(f"File not found for full scan: {file_id}")
-                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
+                raise HTTPException(status_code=400, detail=f"File {file_id} not found")
             with open(files_storage[file_id], "rb") as f:
                 if files_storage[file_id].lower().endswith(".pdf"):
                     doc = fitz.open(stream=f.read(), filetype="pdf")
