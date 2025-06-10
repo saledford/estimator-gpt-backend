@@ -466,7 +466,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
         text_parts = []
         for file_id in file_ids:
             if not os.path.exists(files_storage[file_id]):
-                logger.error("File not found for full scan: {file_id}")
+                logger.error(f"File not found for full scan: {file_id}")
                 raise HTTPException(status_code=404, detail=f"File {file_id} not found")
             with open(files_storage[file_id], "rb") as f:
                 if files_storage[file_id].lower().endswith(".pdf"):
@@ -642,32 +642,66 @@ async def chat(request: Request):
         discussion = data.get("discussion", [])
         project_data = data.get("project_data", {})
 
-        # Get project fields
+        # Extract user question
+        latest_question = discussion[-1]["text"] if discussion else ""
+
+        # Step 1: Ask GPT to generate relevant search terms for spec matching
+        search_prompt = f"""
+You are a construction expert helping identify specification sections.
+
+Given the user's question:
+"{latest_question}"
+
+Return a JSON list (max 6 items) of search terms or synonyms you would use to find the answer in a commercial construction spec manual. Include both technical and common language terms when applicable.
+
+Example format:
+["water closets", "urinals", "toilets", "plumbing fixtures"]
+"""
+
+        search_response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": search_prompt}],
+            temperature=0.3,
+            max_tokens=150
+        )
+        search_terms = []
+        try:
+            search_terms = json.loads(search_response.choices[0].message.content.strip())
+        except Exception as e:
+            logger.warning(f"Failed to parse search terms from GPT: {str(e)}")
+
+        logger.info(f"🔍 GPT search terms: {search_terms}")
+
+        # Step 2: Score each section in specIndex
+        specIndex = project_data.get("specIndex", [])
+        scored_sections = []
+
+        for section in specIndex:
+            title = (section.get("title") or "").lower()
+            text = (section.get("text") or "").lower()[:3000]
+            score = 0
+            for term in search_terms:
+                term = term.lower()
+                if term in title:
+                    score += 3
+                if term in text:
+                    score += 1
+            if score > 0:
+                scored_sections.append((score, section))
+
+        scored_sections.sort(key=lambda x: x[0], reverse=True)
+        top_sections = scored_sections[:3]
+        spec_excerpt = "\n\n---\n\n".join(
+            f"{s['title']}\n\n{s['text'][:3000]}" for _, s in top_sections
+        ) if top_sections else "None found in specIndex."
+
+        # Step 3: Build system prompt
         summary = project_data.get("summary", "")
         notes = json.dumps(project_data.get("notes", []), indent=2)
         divisionDescriptions = json.dumps(project_data.get("divisionDescriptions", {}), indent=2)
         takeoff = json.dumps(project_data.get("takeoff", []), indent=2)
         preferences = json.dumps(project_data.get("preferences", {}), indent=2)
-        specIndex = project_data.get("specIndex", [])
 
-        # Extract relevant spec sections using keyword match
-        latest_question = discussion[-1]["text"].lower() if discussion else ""
-        question_keywords = re.findall(r'\w+', latest_question.lower())
-        relevant_specs = []
-
-        for section in specIndex:
-            combined = f"{section.get('title', '')} {section.get('text', '')}".lower()
-            match_score = sum(1 for word in question_keywords if word in combined)
-            if match_score > 0:
-                relevant_specs.append((match_score, section))
-
-        relevant_specs.sort(key=lambda x: x[0], reverse=True)
-        logger.info(f"Matched spec sections: {[s['title'] for _, s in relevant_specs[:3]]}")
-
-        spec_excerpt = "\n\n---\n\n".join([s["title"] + "\n\n" + s["text"][:3000] for _, s in relevant_specs[:3]])
-        logger.info(f"GPT spec excerpt (first 1000 chars):\n{spec_excerpt[:1000]}")
-
-        # Build system prompt
         context = f"""
 You are a construction assistant. You are helping a contractor review and understand a specific project. 
 Assume that every question refers to the current project unless otherwise stated.
@@ -688,18 +722,16 @@ PREFERENCES:
 {preferences}
 
 RELEVANT SPECS:
-{spec_excerpt if spec_excerpt else 'None found in specIndex.'}
+{spec_excerpt}
 """
 
-        # Build messages for GPT
+        # Step 4: Compose full GPT messages
         messages = [{"role": "system", "content": context}]
         for m in discussion:
             if m["sender"] == "User":
                 messages.append({"role": "user", "content": m["text"]})
             elif m["sender"] == "GPT":
                 messages.append({"role": "assistant", "content": m["text"]})
-
-        logger.info(f"Sending messages to GPT:\n{json.dumps(messages, indent=2)}")
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -709,8 +741,6 @@ RELEVANT SPECS:
         )
 
         raw = response.choices[0].message.content.strip()
-
-        # Check for JSON-formatted action block (optional)
         reply = raw
         actions = []
         try:
