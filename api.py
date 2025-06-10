@@ -115,6 +115,22 @@ def get_user_pricing_overrides(user_id):
         for row in rows
     ]
 
+# Helper function to get user profile
+def get_user_profile(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT company_name, region, default_labor_rate, default_material_markup FROM user_profiles WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "company_name": row[0],
+            "region": row[1],
+            "default_labor_rate": row[2],
+            "default_material_markup": row[3]
+        }
+    return None
+
 @app.on_event("startup")
 async def log_routes():
     for route in app.routes:
@@ -236,42 +252,31 @@ async def parse_spec(file: UploadFile = File(...)):
         return JSONResponse(status_code=500, content={"detail": f"Spec parsing failed: {str(e)}"})
 
 @app.post("/api/save-profile")
-async def save_profile(request: Request):
+async def save_profile(profile: Dict):
     try:
-        data = await request.json()
-        user_id = data.get("id")
-        company_name = data.get("company_name")
-        region = data.get("region")
-        default_labor_rate = data.get("default_labor_rate")
-        default_material_markup = data.get("default_material_markup")
-        notes = data.get("notes")
-
-        if not user_id:
-            raise HTTPException(status_code=400, detail="User ID is required")
+        profile_id = profile.get("id")
+        company_name = profile.get("company_name")
+        region = profile.get("region")
+        default_labor = float(profile.get("default_labor_rate", 0))
+        material_markup = float(profile.get("default_material_markup", 0))
+        notes = profile.get("notes", "")
+        created_at = datetime.utcnow().isoformat()
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
-        INSERT OR REPLACE INTO user_profiles (
-            id, company_name, region, default_labor_rate, default_material_markup, notes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            user_id,
-            company_name,
-            region,
-            default_labor_rate,
-            default_material_markup,
-            notes,
-            datetime.utcnow().isoformat()
-        ))
+            INSERT OR REPLACE INTO user_profiles
+            (id, company_name, region, default_labor_rate, default_material_markup, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (profile_id, company_name, region, default_labor, material_markup, notes, created_at))
         conn.commit()
         conn.close()
 
-        logger.info(f"Saved profile for user_id: {user_id}")
-        return JSONResponse(content={"message": "Profile saved successfully"})
+        logger.info(f"Saved profile for profile_id: {profile_id}")
+        return {"message": "User profile saved successfully", "id": profile_id}
     except Exception as e:
-        logger.error(f"Profile save failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Profile save failed: {str(e)}")
+        logger.error(f"Failed to save user profile: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving profile: {str(e)}")
 
 @app.post("/api/generate-summary")
 async def generate_summary(files: List[UploadFile] = File(...)):
@@ -293,7 +298,6 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             files_storage[file_id] = path
             file_ids.append(file_id)
 
-        # Extract text from uploaded files
         text_parts = []
         for file_id in file_ids:
             path = files_storage[file_id]
@@ -319,7 +323,6 @@ async def generate_summary(files: List[UploadFile] = File(...)):
 
         logger.warning(f"📄 Document input preview:\n{document_text[:1000]}")
 
-        # GPT prompt (structured summary)
         prompt = f"""
 You are a professional construction estimator's assistant. Summarize the uploaded project documents using the following structured format.
 
@@ -453,13 +456,18 @@ async def extract_takeoff(request: Request):
         # Get request data
         form_data = await request.form()
         files = form_data.getlist("files")
-        user_id = form_data.get("user_id")  # Assume user_id is provided in form data
-        if not user_id:
-            raise HTTPException(status_code=400, detail="User ID is required")
+        profile_id = form_data.get("profile_id")  # Require profile_id
+        if not profile_id:
+            raise HTTPException(status_code=400, detail="Profile ID is required")
 
         if not files:
             logger.error("No files provided for takeoff extraction")
             raise HTTPException(status_code=400, detail="No files provided")
+
+        # Fetch user profile
+        profile = get_user_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User profile not found")
 
         file_ids = []
         for file in files:
@@ -496,12 +504,19 @@ async def extract_takeoff(request: Request):
             logger.warning("Truncated document text to 40,000 characters for takeoff")
 
         # Fetch user pricing overrides
-        pricing_overrides = get_user_pricing_overrides(user_id)
+        pricing_overrides = get_user_pricing_overrides(profile_id)
 
         prompt = f"""
 You are a construction assistant extracting takeoff items.
 
-Use the provided pricing overrides to set unit costs where applicable. If no override matches, estimate a reasonable unit cost based on industry standards.
+Use the provided pricing overrides to set unit costs where applicable. If no override matches, use the default labor rate and material markup provided, or estimate a reasonable unit cost based on industry standards.
+
+DEFAULTS:
+{{
+  "region": "{profile['region']}",
+  "default_labor_rate": {profile['default_labor_rate']},
+  "default_material_markup": {profile['default_material_markup']}
+}}
 
 PRICING OVERRIDES (if any):
 {json.dumps(pricing_overrides, indent=2)}
@@ -586,7 +601,7 @@ DOCUMENTS:
                         user_id, division, scope, unit, unit_cost, source, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        user_id,
+                        profile_id,
                         new_item["division"],
                         new_item["description"],
                         new_item["unit"],
@@ -596,9 +611,29 @@ DOCUMENTS:
                     ))
                     conn.commit()
                     conn.close()
-                    logger.info(f"Saved pricing override for user_id: {user_id}, division: {new_item['division']}")
+                    logger.info(f"Saved pricing override for profile_id: {profile_id}, division: {new_item['division']}")
             else:
                 # Skip overwrite to preserve user edit
+                if match.get("userEdited", False):
+                    # Save user-edited override
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT OR REPLACE INTO user_pricing_overrides (
+                        user_id, division, scope, unit, unit_cost, source, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        profile_id,
+                        match["division"],
+                        match["description"],
+                        match["unit"],
+                        match["unitCost"],
+                        "manual",
+                        datetime.utcnow().isoformat()
+                    ))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"Saved manual pricing override for profile_id: {profile_id}, division: {match['division']}")
                 continue
 
         return JSONResponse(content={"takeoff": updated_takeoff})
@@ -612,9 +647,14 @@ async def full_scan(request: Request):
         # Get request data
         form_data = await request.form()
         files = form_data.getlist("files")
-        user_id = form_data.get("user_id")  # Assume user_id is provided in form data
-        if not user_id:
-            raise HTTPException(status_code=400, detail="User ID is required")
+        profile_id = form_data.get("profile_id")  # Require profile_id
+        if not profile_id:
+            raise HTTPException(status_code=400, detail="Profile ID is required")
+
+        # Fetch user profile
+        profile = get_user_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User profile not found")
 
         if not files:
             logger.error("No files provided for full scan")
@@ -737,12 +777,19 @@ DOCUMENTS:
 
         # Extract takeoff items division by division
         all_takeoff_items = []
-        pricing_overrides = get_user_pricing_overrides(user_id)
+        pricing_overrides = get_user_pricing_overrides(profile_id)
         for division_id, division_title in CSI_DIVISIONS.items():
             prompt_takeoff = f"""
 Extract a list of itemized takeoff entries **only** for Division {division_id} – {division_title} from the documents below.
 
-Use the provided pricing overrides to set unit costs where applicable. If no override matches, estimate a reasonable unit cost based on industry standards.
+Use the provided pricing overrides to set unit costs where applicable. If no override matches, use the default labor rate and material markup provided, or estimate a reasonable unit cost based on industry standards.
+
+DEFAULTS:
+{{
+  "region": "{profile['region']}",
+  "default_labor_rate": {profile['default_labor_rate']},
+  "default_material_markup": {profile['default_material_markup']}
+}}
 
 PRICING OVERRIDES (if any):
 {json.dumps(pricing_overrides, indent=2)}
@@ -828,7 +875,7 @@ DOCUMENTS:
                         user_id, division, scope, unit, unit_cost, source, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        user_id,
+                        profile_id,
                         new_item["division"],
                         new_item["description"],
                         new_item["unit"],
@@ -838,9 +885,29 @@ DOCUMENTS:
                     ))
                     conn.commit()
                     conn.close()
-                    logger.info(f"Saved pricing override for user_id: {user_id}, division: {new_item['division']}")
+                    logger.info(f"Saved pricing override for profile_id: {profile_id}, division: {new_item['division']}")
             else:
                 # Skip overwrite to preserve user edit
+                if match.get("userEdited", False):
+                    # Save user-edited override
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT OR REPLACE INTO user_pricing_overrides (
+                        user_id, division, scope, unit, unit_cost, source, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        profile_id,
+                        match["division"],
+                        match["description"],
+                        match["unit"],
+                        match["unitCost"],
+                        "manual",
+                        datetime.utcnow().isoformat()
+                    ))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"Saved manual pricing override for profile_id: {profile_id}, division: {match['division']}")
                 continue
 
         # Build final JSON response
@@ -865,10 +932,14 @@ async def chat(request: Request):
         data = await request.json()
         discussion = data.get("discussion", [])
         project_data = data.get("project_data", {})
-        user_id = data.get("user_id")  # Assume user_id is provided in request
+        profile_id = data.get("profile_id")  # Require profile_id
+        if not profile_id:
+            raise HTTPException(status_code=400, detail="Profile ID is required")
 
-        if not user_id:
-            raise HTTPException(status_code=400, detail="User ID is required")
+        # Fetch user profile
+        profile = get_user_profile(profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User profile not found")
 
         # Extract user question
         latest_question = discussion[-1]["text"] if discussion else ""
@@ -929,11 +1000,18 @@ Example format:
         divisionDescriptions = json.dumps(project_data.get("divisionDescriptions", {}), indent=2)
         takeoff = json.dumps(project_data.get("takeoff", []), indent=2)
         preferences = json.dumps(project_data.get("preferences", {}), indent=2)
-        pricing_overrides = get_user_pricing_overrides(user_id)
+        pricing_overrides = get_user_pricing_overrides(profile_id)
 
         context = f"""
 You are a construction assistant. You are helping a contractor review and understand a specific project. 
 Assume that every question refers to the current project unless otherwise stated.
+
+DEFAULTS:
+{{
+  "region": "{profile['region']}",
+  "default_labor_rate": {profile['default_labor_rate']},
+  "default_material_markup": {profile['default_material_markup']}
+}}
 
 PROJECT SUMMARY:
 {summary}
@@ -990,7 +1068,7 @@ RELEVANT SPECS:
         logger.error(f"Chat error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Chat failed: {str(e)}"})
 
-# Placeholder for anonymized pricing data export (for future implementation)
+# Placeholder for anonymized pricing data export
 def export_anonymized_pricing():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
