@@ -206,12 +206,15 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             files_storage[file_id] = path
             file_ids.append(file_id)
 
+        # Extract text from uploaded files
         text_parts = []
         for file_id in file_ids:
-            if not os.path.exists(files_storage[file_id]):
+            path = files_storage[file_id]
+            if not os.path.exists(path):
+                logger.warning(f"File {file_id} missing on disk")
                 continue
-            with open(files_storage[file_id], "rb") as f:
-                if files_storage[file_id].lower().endswith(".pdf"):
+            with open(path, "rb") as f:
+                if path.lower().endswith(".pdf"):
                     doc = fitz.open(stream=f.read(), filetype="pdf")
                     for page in doc:
                         text_parts.append(page.get_text())
@@ -221,15 +224,15 @@ async def generate_summary(files: List[UploadFile] = File(...)):
 
         document_text = "\n\n".join(text_parts).strip()
         if not document_text:
-            logger.warning("No readable text found in provided files")
-            raise HTTPException(status_code=400, detail="No readable text found")
+            raise HTTPException(status_code=400, detail="No readable text found in uploaded documents")
 
         if len(document_text) > 40000:
             document_text = document_text[:40000]
-            logger.warning("Truncated document text to 40,000 characters for summary")
+            logger.warning("Truncated document text to 40,000 characters")
 
-        logger.info(f"Document preview (first 1000 chars):\n{document_text[:1000]}")
+        logger.warning(f"📄 Document input preview:\n{document_text[:1000]}")
 
+        # GPT prompt (structured summary)
         prompt = f"""
 You are a professional construction estimator's assistant. Summarize the uploaded project documents using the following structured format.
 
@@ -244,7 +247,7 @@ Return a JSON object with:
 Example Output:
 {{
   "title": "Greenville Public Works Renovation",
-  "summary": "**Project Title:** Greenville Public Works Renovation\\n\\n**Scope of Work:** This project involves the interior renovation of...\\n\\n**Project Timeline:** Work is expected to begin in...\\n\\n**Additional Notes:** Coordinate with city inspector..."
+  "summary": "**Project Title:** Greenville Public Works Renovation\\n\\n**Scope of Work:** This project involves...\\n\\n**Project Timeline:** Expected to begin...\\n\\n**Additional Notes:** ..."
 }}
 
 DOCUMENTS:
@@ -253,32 +256,30 @@ DOCUMENTS:
 
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert construction assistant."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
             max_tokens=3500
         )
         raw_response = response.choices[0].message.content.strip()
-        logger.warning(f"🧠 GPT returned raw summary content:\n{raw_response}")
+        logger.warning(f"🧠 GPT returned summary response:\n{raw_response}")
 
         if not raw_response:
-            raise ValueError("GPT returned an empty response")
+            raise HTTPException(status_code=500, detail="GPT returned an empty summary")
 
         try:
             parsed = json.loads(raw_response.replace("'", '"'))
         except Exception as e:
-            raise ValueError(f"GPT returned invalid JSON: {e}")
+            raise HTTPException(status_code=500, detail=f"GPT returned invalid summary: {str(e)}")
 
         if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
-            raise ValueError("Invalid summary structure")
+            raise ValueError("Invalid GPT response format")
 
         safe_title = re.sub(r'[^a-zA-Z0-9 _-]', '', parsed["title"])
         return JSONResponse(content={"title": safe_title, "summary": parsed["summary"]})
+
     except Exception as e:
         logger.error(f"Summary generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": f"Summary generation failed: {str(e)}"})
 
 @app.post("/api/generate-divisions")
 async def generate_divisions(files: List[UploadFile] = File(...)):
