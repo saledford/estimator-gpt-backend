@@ -228,7 +228,7 @@ async def generate_summary(files: List[UploadFile] = File(...)):
             logger.warning("Truncated document text to 40,000 characters for summary")
 
         prompt = f"""
-You are a construction estimator AI.
+You are a construction assistant.
 
 Generate:
 1. "title": A short, clean project name (4–8 words, no symbols)
