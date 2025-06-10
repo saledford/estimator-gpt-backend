@@ -12,6 +12,7 @@ import traceback
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
+from datetime import datetime
 
 load_dotenv()
 client = OpenAI()
@@ -449,7 +450,37 @@ DOCUMENTS:
                 content={"detail": "GPT scan returned no usable takeoff items."}
             )
 
-        return JSONResponse(content={"takeoff": parsed})
+        # Add userEdited: False and metadata to new items
+        new_takeoff_items = []
+        for item in parsed:
+            item["userEdited"] = False
+            item["id"] = str(uuid.uuid4())
+            item["createdAt"] = datetime.utcnow().isoformat()
+            new_takeoff_items.append(item)
+
+        # Merge strategy: avoid overwriting user-edited rows
+        existing_takeoff = []  # Assume fetched from project data or database
+        updated_takeoff = existing_takeoff.copy()
+
+        for new_item in new_takeoff_items:
+            match = next((item for item in existing_takeoff if 
+                          item["description"].strip().lower() == new_item["description"].strip().lower() and 
+                          item["division"] == new_item["division"]), None)
+            
+            if not match:
+                updated_takeoff.append(new_item)
+            elif not match.get("userEdited", False):
+                # Update only if not user-edited
+                new_item["id"] = match["id"]
+                new_item["createdAt"] = match["createdAt"]
+                updated_takeoff = [
+                    (new_item if item["id"] == match["id"] else item) for item in updated_takeoff
+                ]
+            else:
+                # Skip overwrite to preserve user edit
+                continue
+
+        return JSONResponse(content={"takeoff": updated_takeoff})
     except Exception as e:
         logger.error(f"Takeoff extraction failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Takeoff extraction failed: {str(e)}")
@@ -619,7 +650,11 @@ DOCUMENTS:
                 logger.info(f"Raw GPT takeoff response for division {division_id}: {raw_takeoff}")
                 takeoff_items = json.loads(raw_takeoff.replace("'", '"'))
                 if isinstance(takeoff_items, list) and takeoff_items:
-                    all_takeoff_items.extend(takeoff_items)
+                    for item in takeoff_items:
+                        item["userEdited"] = False
+                        item["id"] = str(uuid.uuid4())
+                        item["createdAt"] = datetime.utcnow().isoformat()
+                        all_takeoff_items.append(item)
             except Exception as e:
                 logger.error(f"Failed to extract takeoff for division {division_id}: {str(e)}")
                 continue
@@ -632,12 +667,34 @@ DOCUMENTS:
                 content={"detail": "GPT scan returned no usable summary or takeoff items."}
             )
 
+        # Merge strategy: avoid overwriting user-edited rows
+        existing_takeoff = []  # Assume fetched from project data or database
+        updated_takeoff = existing_takeoff.copy()
+
+        for new_item in all_takeoff_items:
+            match = next((item for item in existing_takeoff if 
+                          item["description"].strip().lower() == new_item["description"].strip().lower() and 
+                          item["division"] == new_item["division"]), None)
+            
+            if not match:
+                updated_takeoff.append(new_item)
+            elif not match.get("userEdited", False):
+                # Update only if not user-edited
+                new_item["id"] = match["id"]
+                new_item["createdAt"] = match["createdAt"]
+                updated_takeoff = [
+                    (new_item if item["id"] == match["id"] else item) for item in updated_takeoff
+                ]
+            else:
+                # Skip overwrite to preserve user edit
+                continue
+
         # Build final JSON response
         result = {
             "title": title_summary.get("title", "Untitled Project"),
             "summary": title_summary.get("summary", "Unable to generate project summary."),
             "divisionDescriptions": division_descriptions,
-            "takeoff": all_takeoff_items
+            "takeoff": updated_takeoff
         }
         logger.info(f"Full scan completed: title={result['title']}, {len(result['takeoff'])} takeoff items")
         return JSONResponse(content=result)
