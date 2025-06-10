@@ -79,7 +79,7 @@ async def root():
 @app.post("/api/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        logger.info("📥📥 Received upload request.")
+        logger.info("📥 Received upload request.")
         logger.info(f"Filename: {file.filename}")
 
         if not file.filename:
@@ -246,7 +246,7 @@ DOCUMENTS:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "system", "content": "You are an expert construction assistant."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
@@ -310,7 +310,7 @@ async def generate_divisions(files: List[UploadFile] = File(...)):
             logger.warning("Truncated document text to 40,000 characters for divisions")
 
         prompt = f"""
-You are a construction estimator AI.
+You are a construction assistant.
 
 Identify all relevant CSI divisions in the documents. For each, provide a brief summary (1–2 sentences) indicating whether scope is detected.
 
@@ -330,7 +330,7 @@ DOCUMENTS:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "system", "content": "You are an expert construction assistant."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
@@ -389,7 +389,7 @@ async def extract_takeoff(files: List[UploadFile] = File(...)):
             logger.warning("Truncated document text to 40,000 characters for takeoff")
 
         prompt = f"""
-You are a construction estimator extracting takeoff items.
+You are a construction assistant extracting takeoff items.
 
 Return a JSON list of items with:
 - division
@@ -417,7 +417,7 @@ DOCUMENTS:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert construction estimator."},
+                {"role": "system", "content": "You are an expert construction assistant."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
@@ -466,7 +466,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
         text_parts = []
         for file_id in file_ids:
             if not os.path.exists(files_storage[file_id]):
-                logger.error(f"File not found for full scan: {file_id}")
+                logger.error("File not found for full scan: {file_id}")
                 raise HTTPException(status_code=404, detail=f"File {file_id} not found")
             with open(files_storage[file_id], "rb") as f:
                 if files_storage[file_id].lower().endswith(".pdf"):
@@ -488,7 +488,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
 
         # Extract title and summary
         prompt_title_summary = f"""
-You are a professional construction estimator AI.
+You are a professional construction assistant.
 
 From the following construction documents, extract the following:
 1. "title": A short, clean project name (no file names or markup)
@@ -507,7 +507,7 @@ DOCUMENTS:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert construction estimator."},
+                    {"role": "system", "content": "You are an expert construction assistant."},
                     {"role": "user", "content": prompt_title_summary}
                 ],
                 temperature=0.4,
@@ -548,7 +548,7 @@ DOCUMENTS:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert construction estimator."},
+                    {"role": "system", "content": "You are an expert construction assistant."},
                     {"role": "user", "content": prompt_division_descriptions}
                 ],
                 temperature=0.4,
@@ -596,7 +596,7 @@ DOCUMENTS:
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You are an expert construction estimator."},
+                        {"role": "system", "content": "You are an expert construction assistant."},
                         {"role": "user", "content": prompt_takeoff}
                     ],
                     temperature=0.4,
@@ -652,11 +652,15 @@ async def chat(request: Request):
 
         # Extract relevant spec sections using keyword match
         latest_question = discussion[-1]["text"].lower() if discussion else ""
+        question_keywords = re.findall(r'\w+', latest_question.lower())
         relevant_specs = []
-        for s in specIndex:
-            match_score = sum(1 for word in latest_question.split() if word in s["text"].lower())
+
+        for section in specIndex:
+            combined = f"{section.get('title', '')} {section.get('text', '')}".lower()
+            match_score = sum(1 for word in question_keywords if word in combined)
             if match_score > 0:
-                relevant_specs.append((match_score, s))
+                relevant_specs.append((match_score, section))
+
         relevant_specs.sort(key=lambda x: x[0], reverse=True)
         logger.info(f"Matched spec sections: {[s['title'] for _, s in relevant_specs[:3]]}")
 
@@ -665,7 +669,7 @@ async def chat(request: Request):
 
         # Build system prompt
         context = f"""
-You are a construction estimator assistant. You are helping a contractor review and understand a specific project. 
+You are a construction assistant. You are helping a contractor review and understand a specific project. 
 Assume that every question refers to the current project unless otherwise stated.
 
 PROJECT SUMMARY:
