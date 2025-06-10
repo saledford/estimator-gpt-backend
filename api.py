@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import json
 from datetime import datetime
+import sqlite3
 
 load_dotenv()
 client = OpenAI()
@@ -34,6 +35,41 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Initialize SQLite database
+DB_PATH = "estimator_gpt.db"
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    # Create user_profiles table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_profiles (
+        id TEXT PRIMARY KEY,
+        company_name TEXT,
+        region TEXT,
+        default_labor_rate REAL,
+        default_material_markup REAL,
+        notes TEXT,
+        created_at TEXT
+    );
+    """)
+    # Create user_pricing_overrides table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_pricing_overrides (
+        user_id TEXT,
+        division TEXT,
+        scope TEXT,
+        unit TEXT,
+        unit_cost REAL,
+        source TEXT,
+        created_at TEXT,
+        PRIMARY KEY (user_id, division, scope)
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # Constants
 CSI_DIVISIONS = {
@@ -66,6 +102,18 @@ CSI_DIVISIONS = {
 UPLOAD_DIR = "./temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 files_storage: Dict[str, str] = {}  # Track file_id to filepath
+
+# Helper function to get user pricing overrides
+def get_user_pricing_overrides(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT division, scope, unit, unit_cost FROM user_pricing_overrides WHERE user_id = ?", (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {"division": row[0], "scope": row[1], "unit": row[2], "unitCost": row[3]}
+        for row in rows
+    ]
 
 @app.on_event("startup")
 async def log_routes():
@@ -186,6 +234,44 @@ async def parse_spec(file: UploadFile = File(...)):
         logger.error(f"Spec parsing failed: {str(e)}")
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": f"Spec parsing failed: {str(e)}"})
+
+@app.post("/api/save-profile")
+async def save_profile(request: Request):
+    try:
+        data = await request.json()
+        user_id = data.get("id")
+        company_name = data.get("company_name")
+        region = data.get("region")
+        default_labor_rate = data.get("default_labor_rate")
+        default_material_markup = data.get("default_material_markup")
+        notes = data.get("notes")
+
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT OR REPLACE INTO user_profiles (
+            id, company_name, region, default_labor_rate, default_material_markup, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id,
+            company_name,
+            region,
+            default_labor_rate,
+            default_material_markup,
+            notes,
+            datetime.utcnow().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Saved profile for user_id: {user_id}")
+        return JSONResponse(content={"message": "Profile saved successfully"})
+    except Exception as e:
+        logger.error(f"Profile save failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Profile save failed: {str(e)}")
 
 @app.post("/api/generate-summary")
 async def generate_summary(files: List[UploadFile] = File(...)):
@@ -362,12 +448,19 @@ DOCUMENTS:
         raise HTTPException(status_code=500, detail=f"Divisions generation failed: {str(e)}")
 
 @app.post("/api/extract-takeoff")
-async def extract_takeoff(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for takeoff extraction")
-        raise HTTPException(status_code=400, detail="No files provided")
-
+async def extract_takeoff(request: Request):
     try:
+        # Get request data
+        form_data = await request.form()
+        files = form_data.getlist("files")
+        user_id = form_data.get("user_id")  # Assume user_id is provided in form data
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        if not files:
+            logger.error("No files provided for takeoff extraction")
+            raise HTTPException(status_code=400, detail="No files provided")
+
         file_ids = []
         for file in files:
             if not file.filename:
@@ -402,8 +495,16 @@ async def extract_takeoff(files: List[UploadFile] = File(...)):
             document_text = document_text[:40000]
             logger.warning("Truncated document text to 40,000 characters for takeoff")
 
+        # Fetch user pricing overrides
+        pricing_overrides = get_user_pricing_overrides(user_id)
+
         prompt = f"""
 You are a construction assistant extracting takeoff items.
+
+Use the provided pricing overrides to set unit costs where applicable. If no override matches, estimate a reasonable unit cost based on industry standards.
+
+PRICING OVERRIDES (if any):
+{json.dumps(pricing_overrides, indent=2)}
 
 Return a JSON list of items with:
 - division
@@ -476,6 +577,26 @@ DOCUMENTS:
                 updated_takeoff = [
                     (new_item if item["id"] == match["id"] else item) for item in updated_takeoff
                 ]
+                # Save override if unitCost or modifier changed
+                if new_item.get("unitCost") != match.get("unitCost") or new_item.get("modifier") != match.get("modifier"):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT OR REPLACE INTO user_pricing_overrides (
+                        user_id, division, scope, unit, unit_cost, source, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        user_id,
+                        new_item["division"],
+                        new_item["description"],
+                        new_item["unit"],
+                        new_item["unitCost"],
+                        "gpt",
+                        datetime.utcnow().isoformat()
+                    ))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"Saved pricing override for user_id: {user_id}, division: {new_item['division']}")
             else:
                 # Skip overwrite to preserve user edit
                 continue
@@ -486,12 +607,19 @@ DOCUMENTS:
         raise HTTPException(status_code=500, detail=f"Takeoff extraction failed: {str(e)}")
 
 @app.post("/api/full-scan")
-async def full_scan(files: List[UploadFile] = File(...)):
-    if not files:
-        logger.error("No files provided for full scan")
-        raise HTTPException(status_code=400, detail="No files provided")
-
+async def full_scan(request: Request):
     try:
+        # Get request data
+        form_data = await request.form()
+        files = form_data.getlist("files")
+        user_id = form_data.get("user_id")  # Assume user_id is provided in form data
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        if not files:
+            logger.error("No files provided for full scan")
+            raise HTTPException(status_code=400, detail="No files provided")
+
         file_ids = []
         for file in files:
             if not file.filename:
@@ -609,9 +737,15 @@ DOCUMENTS:
 
         # Extract takeoff items division by division
         all_takeoff_items = []
+        pricing_overrides = get_user_pricing_overrides(user_id)
         for division_id, division_title in CSI_DIVISIONS.items():
             prompt_takeoff = f"""
 Extract a list of itemized takeoff entries **only** for Division {division_id} – {division_title} from the documents below.
+
+Use the provided pricing overrides to set unit costs where applicable. If no override matches, estimate a reasonable unit cost based on industry standards.
+
+PRICING OVERRIDES (if any):
+{json.dumps(pricing_overrides, indent=2)}
 
 Format as JSON array. Each item must include:
 - division
@@ -685,6 +819,26 @@ DOCUMENTS:
                 updated_takeoff = [
                     (new_item if item["id"] == match["id"] else item) for item in updated_takeoff
                 ]
+                # Save override if unitCost or modifier changed
+                if new_item.get("unitCost") != match.get("unitCost") or new_item.get("modifier") != match.get("modifier"):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT OR REPLACE INTO user_pricing_overrides (
+                        user_id, division, scope, unit, unit_cost, source, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        user_id,
+                        new_item["division"],
+                        new_item["description"],
+                        new_item["unit"],
+                        new_item["unitCost"],
+                        "gpt",
+                        datetime.utcnow().isoformat()
+                    ))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"Saved pricing override for user_id: {user_id}, division: {new_item['division']}")
             else:
                 # Skip overwrite to preserve user edit
                 continue
@@ -711,6 +865,10 @@ async def chat(request: Request):
         data = await request.json()
         discussion = data.get("discussion", [])
         project_data = data.get("project_data", {})
+        user_id = data.get("user_id")  # Assume user_id is provided in request
+
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
 
         # Extract user question
         latest_question = discussion[-1]["text"] if discussion else ""
@@ -771,6 +929,7 @@ Example format:
         divisionDescriptions = json.dumps(project_data.get("divisionDescriptions", {}), indent=2)
         takeoff = json.dumps(project_data.get("takeoff", []), indent=2)
         preferences = json.dumps(project_data.get("preferences", {}), indent=2)
+        pricing_overrides = get_user_pricing_overrides(user_id)
 
         context = f"""
 You are a construction assistant. You are helping a contractor review and understand a specific project. 
@@ -790,6 +949,9 @@ TAKEOFF:
 
 PREFERENCES:
 {preferences}
+
+PRICING OVERRIDES (if any):
+{json.dumps(pricing_overrides, indent=2)}
 
 RELEVANT SPECS:
 {spec_excerpt}
@@ -827,3 +989,26 @@ RELEVANT SPECS:
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Chat failed: {str(e)}"})
+
+# Placeholder for anonymized pricing data export (for future implementation)
+def export_anonymized_pricing():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT p.region, o.division, o.unit, AVG(o.unit_cost) as average_unit_cost, COUNT(*) as sources
+    FROM user_pricing_overrides o
+    JOIN user_profiles p ON o.user_id = p.id
+    GROUP BY p.region, o.division, o.unit
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "region": row[0],
+            "division": row[1],
+            "unit": row[2],
+            "average_unit_cost": row[3],
+            "sources": row[4]
+        }
+        for row in rows
+    ]
