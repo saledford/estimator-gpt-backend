@@ -261,18 +261,20 @@ DOCUMENTS:
             max_tokens=3500
         )
         raw_response = response.choices[0].message.content.strip()
-        logger.info(f"Raw GPT summary response:\n{raw_response}")
+        logger.warning(f"🧠 GPT returned raw summary content:\n{raw_response}")
+
+        if not raw_response:
+            raise ValueError("GPT returned an empty response")
 
         try:
             parsed = json.loads(raw_response.replace("'", '"'))
         except Exception as e:
-            logger.error(f"Summary parse error: {str(e)}")
-            raise HTTPException(status_code=500, detail="GPT returned invalid summary: " + str(e))
+            raise ValueError(f"GPT returned invalid JSON: {e}")
 
         if not isinstance(parsed, dict) or "title" not in parsed or "summary" not in parsed:
             raise ValueError("Invalid summary structure")
 
-        safe_title = re.sub(r'[^a-zA-Z0-9 _]', '', parsed["title"])
+        safe_title = re.sub(r'[^a-zA-Z0-9 _-]', '', parsed["title"])
         return JSONResponse(content={"title": safe_title, "summary": parsed["summary"]})
     except Exception as e:
         logger.error(f"Summary generation failed: {str(e)}")
@@ -477,7 +479,7 @@ async def full_scan(files: List[UploadFile] = File(...)):
         for file_id in file_ids:
             if not os.path.exists(files_storage[file_id]):
                 logger.error(f"File not found for full scan: {file_id}")
-                raise HTTPException(status_code=400, detail=f"File {file_id} not found")
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found")
             with open(files_storage[file_id], "rb") as f:
                 if files_storage[file_id].lower().endswith(".pdf"):
                     doc = fitz.open(stream=f.read(), filetype="pdf")
