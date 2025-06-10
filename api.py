@@ -66,6 +66,44 @@ def init_db():
         PRIMARY KEY (user_id, division, scope)
     );
     """)
+    # Create takeoff_edits table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS takeoff_edits (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        user_id TEXT,
+        original_description TEXT,
+        field_edited TEXT,
+        old_value TEXT,
+        new_value TEXT,
+        edited_at TEXT
+    );
+    """)
+    # Create gpt_feedback table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gpt_feedback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        project_id TEXT,
+        message TEXT,
+        context TEXT,
+        rating TEXT,
+        created_at TEXT
+    );
+    """)
+    # Create job_outcomes table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS job_outcomes (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        user_id TEXT,
+        bid_amount REAL,
+        actual_cost REAL,
+        won_job BOOLEAN,
+        notes TEXT,
+        created_at TEXT
+    );
+    """)
     conn.commit()
     conn.close()
 
@@ -449,6 +487,80 @@ DOCUMENTS:
     except Exception as e:
         logger.error(f"Divisions generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Divisions generation failed: {str(e)}")
+
+@app.post("/api/log-takeoff-edit")
+async def log_takeoff_edit(edit: Dict):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO takeoff_edits (id, project_id, user_id, original_description, field_edited, old_value, new_value, edited_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()),
+            edit["project_id"],
+            edit["user_id"],
+            edit["original_description"],
+            edit["field_edited"],
+            str(edit["old_value"]),
+            str(edit["new_value"]),
+            datetime.utcnow().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        return {"message": "Takeoff edit logged"}
+    except Exception as e:
+        logger.error(f"Failed to log takeoff edit: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error logging edit: {str(e)}")
+
+@app.post("/api/submit-feedback")
+async def submit_feedback(data: Dict):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO gpt_feedback (id, user_id, project_id, message, context, rating, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()),
+            data["user_id"],
+            data["project_id"],
+            data["message"],
+            data.get("context", ""),
+            data["rating"],
+            datetime.utcnow().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        return {"message": "Feedback submitted"}
+    except Exception as e:
+        logger.error(f"Failed to submit feedback: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+
+@app.post("/api/log-job-outcome")
+async def log_job_outcome(data: Dict):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO job_outcomes (id, project_id, user_id, bid_amount, actual_cost, won_job, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()),
+            data["project_id"],
+            data["user_id"],
+            float(data["bid_amount"]),
+            float(data["actual_cost"]),
+            bool(data["won_job"]),
+            data.get("notes", ""),
+            datetime.utcnow().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        return {"message": "Job outcome logged"}
+    except Exception as e:
+        logger.error(f"Failed to log job outcome: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error logging outcome: {str(e)}")
 
 @app.post("/api/extract-takeoff")
 async def extract_takeoff(request: Request):
